@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Demo-flavor network security config.
+    Permits cleartext HTTP only to the dev Fargate ALB.
+    This file is NOT merged into the prod flavor — prod requires HTTPS everywhere.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">vigia-ts-search-204472952.us-east-1.elb.amazonaws.com</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

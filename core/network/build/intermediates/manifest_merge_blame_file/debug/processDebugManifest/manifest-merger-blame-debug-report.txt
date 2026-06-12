@@ -1,0 +1,37 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.vigia.core.network" >
+4
+5    <uses-sdk android:minSdkVersion="34" />
+6
+7    <uses-permission android:name="android.permission.INTERNET" />
+7-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:4:5-67
+7-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:4:22-64
+8    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+8-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:5:5-79
+8-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:5:22-76
+9
+10    <application>
+10-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:7:5-22:19
+11
+12        <!--
+13            FCM receiver — two roles:
+14            1. Doze wakeup: reconnects MQTT after the radio window opens.
+15            2. Direct injection: delivers CRITICAL alert payloads when MQTT is unreachable.
+16        -->
+17        <service
+17-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:14:9-20:19
+18            android:name="com.vigia.core.network.fcm.VigiaFcmReceiver"
+18-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:15:13-49
+19            android:exported="false" >
+19-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:16:13-37
+20            <intent-filter>
+20-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:17:13-19:29
+21                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+21-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:18:17-78
+21-->/Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:18:25-75
+22            </intent-filter>
+23        </service>
+24    </application>
+25
+26</manifest>

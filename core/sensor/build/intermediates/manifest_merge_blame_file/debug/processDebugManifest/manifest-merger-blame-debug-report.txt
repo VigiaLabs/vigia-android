@@ -1,0 +1,92 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.vigia.core.sensor" >
+4
+5    <uses-sdk android:minSdkVersion="34" />
+6
+7    <!-- CDM — required for Presence API and background service launch -->
+8    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+8-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:5:5-94
+8-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:5:22-91
+9    <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
+9-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:6:5-99
+9-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:6:22-96
+10    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+10-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:7:5-118
+10-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:7:22-115
+11
+12    <!-- connectedDevice type bypasses the 6-hour dataSync timeout (API 34+) -->
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+13-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:10:5-77
+13-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:10:22-74
+14    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+14-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:11:5-94
+14-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:11:22-91
+15
+16    <!-- BLE Secure Connections — neverForLocation avoids runtime location prompt for scanning -->
+17    <uses-permission
+17-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:14:5-16:58
+18        android:name="android.permission.BLUETOOTH_SCAN"
+18-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:15:9-57
+19        android:usesPermissionFlags="neverForLocation" />
+19-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:16:9-55
+20    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+20-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:17:5-76
+20-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:17:22-73
+21
+22    <uses-feature
+22-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:18:5-20:35
+23        android:name="android.hardware.bluetooth_le"
+23-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:19:9-53
+24        android:required="true" />
+24-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:20:9-32
+25
+26    <!-- Fused Location Provider for VigiaSearchContext velocity + bearing -->
+27    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+27-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:23:5-79
+27-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:23:22-76
+28    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+28-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:24:5-81
+28-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:24:22-78
+29
+30    <application>
+30-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:26:5-53:19
+31
+32        <!--
+33            Foreground service typed as 'connectedDevice'.
+34            This type is exempt from the 6-hour background execution limit when a valid
+35            CompanionDeviceManager association is active (API 34+, no SDK guard needed).
+36        -->
+37        <service
+37-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:33:9-36:40
+38            android:name="com.vigia.core.sensor.service.VigiaForegroundService"
+38-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:34:13-59
+39            android:exported="false"
+39-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:36:13-37
+40            android:foregroundServiceType="connectedDevice" />
+40-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:35:13-60
+41
+42        <!--
+43            CompanionDeviceService — the system binds to this service when a registered
+44            CDM association device is within BLE proximity.
+45            Requires android:exported="true" and the BIND_COMPANION_DEVICE_SERVICE permission
+46            so only the system can bind to it.
+47        -->
+48        <service
+48-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:44:9-51:19
+49            android:name="com.vigia.core.sensor.cdm.CdmPresenceService"
+49-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:45:13-51
+50            android:exported="true"
+50-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:46:13-36
+51            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE" >
+51-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:47:13-82
+52            <intent-filter>
+52-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:48:13-50:29
+53                <action android:name="android.companion.CompanionDeviceService" />
+53-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:49:17-83
+53-->/Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:49:25-80
+54            </intent-filter>
+55        </service>
+56    </application>
+57
+58</manifest>

@@ -1,0 +1,10 @@
+<resources>
+    <!--
+        Google OAuth *Web application* client ID (NOT the Android client ID).
+        Create one in Google Cloud Console → APIs & Services → Credentials, then
+        register it in your Cognito User Pool's Google IdP if you also federate.
+        Format: 1234567890-abcdefg.apps.googleusercontent.com
+        Until replaced, the native Google picker shows a "not configured" message.
+    -->
+    <string name="vigia_google_web_client_id" translatable="false">REPLACE_WITH_GOOGLE_WEB_CLIENT_ID</string>
+</resources>

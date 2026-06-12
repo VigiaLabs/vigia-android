@@ -1,0 +1,92 @@
+package com.vigia.core.network.fcm
+
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import com.vigia.core.model.HazardAlert
+import com.vigia.core.model.LocationSnapshot
+import com.vigia.core.network.mqtt.MqttAlertRepository
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.util.UUID
+import javax.inject.Inject
+
+/**
+ * FCM push receiver — two responsibilities:
+ *
+ * 1. **Doze wakeup**: A high-priority FCM data message wakes the device and triggers
+ *    [MqttAlertRepository.reconnect] so the MQTT connection is re-established before
+ *    the next radio window closes.
+ *
+ * 2. **Direct alert delivery**: If the FCM payload itself contains alert data (fallback
+ *    for when MQTT is unreachable), the alert is injected directly via [injectAlert].
+ *    This ensures CRITICAL alerts are never silently dropped.
+ *
+ * FCM data payload keys (all optional):
+ *   type     → "alert" to trigger direct injection, anything else → reconnect-only
+ *   severity → LOW | MEDIUM | HIGH | CRITICAL
+ *   message  → display text
+ *   lat, lng → location of the hazard
+ *   id       → deduplication key
+ *   ts       → epoch milliseconds
+ */
+@AndroidEntryPoint
+class VigiaFcmReceiver : FirebaseMessagingService() {
+
+    @Inject lateinit var mqttAlertRepository: MqttAlertRepository
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override fun onMessageReceived(message: RemoteMessage) {
+        // Always trigger MQTT reconnect — this is the primary Doze wakeup path.
+        mqttAlertRepository.reconnect()
+
+        // If the payload contains a full alert, inject it without waiting for MQTT.
+        val data = message.data
+        if (data["type"] == "alert") {
+            buildAlert(data)?.let { alert ->
+                scope.launch { mqttAlertRepository.injectAlert(alert) }
+            }
+        }
+    }
+
+    override fun onNewToken(token: String) {
+        // TODO: upload token to backend so FCM can reach this device.
+        // Token should be sent to: POST /v1/device/register  { fcmToken: token }
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    private fun buildAlert(data: Map<String, String>): HazardAlert? {
+        val message = data["message"] ?: return null
+        val severity = when (data["severity"]?.uppercase()) {
+            "LOW"      -> HazardAlert.Severity.LOW
+            "MEDIUM"   -> HazardAlert.Severity.MEDIUM
+            "HIGH"     -> HazardAlert.Severity.HIGH
+            "CRITICAL" -> HazardAlert.Severity.CRITICAL
+            else       -> HazardAlert.Severity.MEDIUM
+        }
+        val location: LocationSnapshot? = if (data.containsKey("lat") && data.containsKey("lng")) {
+            runCatching {
+                LocationSnapshot(
+                    latitudeDeg    = data["lat"]!!.toDouble(),
+                    longitudeDeg   = data["lng"]!!.toDouble(),
+                    accuracyMeters = data["accuracy"]?.toFloatOrNull() ?: 50f,
+                    bearingDeg     = 0f,
+                    velocityMs     = 0f,
+                    timestampMs    = data["ts"]?.toLongOrNull() ?: System.currentTimeMillis(),
+                )
+            }.getOrNull()
+        } else null
+
+        return HazardAlert(
+            id               = data["id"] ?: UUID.randomUUID().toString(),
+            severity         = severity,
+            messageText      = message,
+            timestampMs      = data["ts"]?.toLongOrNull() ?: System.currentTimeMillis(),
+            locationSnapshot = location,
+        )
+    }
+}

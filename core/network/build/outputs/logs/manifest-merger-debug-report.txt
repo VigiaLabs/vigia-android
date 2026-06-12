@@ -1,0 +1,38 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:2:1-24:12
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:2:1-24:12
+	package
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.INTERNET
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:4:5-67
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:4:22-64
+uses-permission#android.permission.ACCESS_NETWORK_STATE
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:5:5-79
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:5:22-76
+application
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:7:5-22:19
+service#com.vigia.core.network.fcm.VigiaFcmReceiver
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:14:9-20:19
+	android:exported
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:16:13-37
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:15:13-49
+intent-filter#action:name:com.google.firebase.MESSAGING_EVENT
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:17:13-19:29
+action#com.google.firebase.MESSAGING_EVENT
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:18:17-78
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml:18:25-75
+uses-sdk
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/network/src/main/AndroidManifest.xml

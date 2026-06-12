@@ -1,0 +1,84 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:2:1-55:12
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:2:1-55:12
+	package
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:5:5-94
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:5:22-91
+uses-permission#android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:6:5-99
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:6:22-96
+uses-permission#android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:7:5-118
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:7:22-115
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:10:5-77
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:10:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:11:5-94
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:11:22-91
+uses-permission#android.permission.BLUETOOTH_SCAN
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:14:5-16:58
+	android:usesPermissionFlags
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:16:9-55
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:15:9-57
+uses-permission#android.permission.BLUETOOTH_CONNECT
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:17:5-76
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:17:22-73
+uses-feature#android.hardware.bluetooth_le
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:18:5-20:35
+	android:required
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:20:9-32
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:19:9-53
+uses-permission#android.permission.ACCESS_FINE_LOCATION
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:23:5-79
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:23:22-76
+uses-permission#android.permission.ACCESS_COARSE_LOCATION
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:24:5-81
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:24:22-78
+application
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:26:5-53:19
+service#com.vigia.core.sensor.service.VigiaForegroundService
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:33:9-36:40
+	android:exported
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:36:13-37
+	android:foregroundServiceType
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:35:13-60
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:34:13-59
+service#com.vigia.core.sensor.cdm.CdmPresenceService
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:44:9-51:19
+	android:exported
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:46:13-36
+	android:permission
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:47:13-82
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:45:13-51
+intent-filter#action:name:android.companion.CompanionDeviceService
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:48:13-50:29
+action#android.companion.CompanionDeviceService
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:49:17-83
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml:49:25-80
+uses-sdk
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/sensor/src/main/AndroidManifest.xml

@@ -1,0 +1,25 @@
+# Standard & C/Rust Blocks
+build/
+dist/
+bin/
+*.o
+*.a
+*.so
+*.out
+.cache/
+Cargo.lock
+
+# Android & Gradle Blocks
+.gradle/
+app/build/
+local.properties
+*.iml
+.idea/
+
+# System & NPM Blocks
+.git/
+node_modules/
+package-lock.json
+
+# Session traces
+.context_snapshot.md

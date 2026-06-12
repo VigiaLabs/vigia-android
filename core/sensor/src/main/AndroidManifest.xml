@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- CDM — required for Presence API and background service launch -->
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+
+    <!-- connectedDevice type bypasses the 6-hour dataSync timeout (API 34+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- BLE Secure Connections — neverForLocation avoids runtime location prompt for scanning -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="true" />
+
+    <!-- Fused Location Provider for VigiaSearchContext velocity + bearing -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application>
+
+        <!--
+            Foreground service typed as 'connectedDevice'.
+            This type is exempt from the 6-hour background execution limit when a valid
+            CompanionDeviceManager association is active (API 34+, no SDK guard needed).
+        -->
+        <service
+            android:name=".service.VigiaForegroundService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
+
+        <!--
+            CompanionDeviceService — the system binds to this service when a registered
+            CDM association device is within BLE proximity.
+            Requires android:exported="true" and the BIND_COMPANION_DEVICE_SERVICE permission
+            so only the system can bind to it.
+        -->
+        <service
+            android:name=".cdm.CdmPresenceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
+            </intent-filter>
+        </service>
+
+    </application>
+
+</manifest>

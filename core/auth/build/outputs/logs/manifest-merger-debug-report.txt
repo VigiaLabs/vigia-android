@@ -1,0 +1,20 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml:2:1-7:12
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml:2:1-7:12
+	package
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.INTERNET
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml:5:5-67
+	android:name
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml:5:22-64
+uses-sdk
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/core/auth/src/main/AndroidManifest.xml
