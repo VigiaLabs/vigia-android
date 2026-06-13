@@ -224,9 +224,16 @@ class CopilotViewModel @Inject constructor(
 
     /**
      * Opens the voice overlay and starts microphone capture.
-     * Call only after RECORD_AUDIO permission has been granted.
+     * Only starts if we are not already recording (guards against the auto-loop
+     * firing while the session was dismissed mid-flight).
+     * RECORD_AUDIO permission must be granted before calling — [CopilotRoute] owns that gate.
      */
     fun startVoiceMode() {
+        val current = _uiState.value as? CopilotUiState.Active ?: return
+        // Don't restart recording if already Listening or Processing.
+        if (current.voiceListeningState == VoiceListeningState.Listening ||
+            current.voiceListeningState == VoiceListeningState.Processing) return
+
         voiceAmplitudeMonitor.startRecording()
         updateActive {
             copy(
@@ -248,6 +255,8 @@ class CopilotViewModel @Inject constructor(
      * The aurora mist stays visible and transitions to Processing state while STT runs.
      */
     fun endVoiceRecording() {
+        val current = _uiState.value as? CopilotUiState.Active ?: return
+        if (current.voiceListeningState != VoiceListeningState.Listening) return
         val wav = voiceAmplitudeMonitor.stopAndGetWav()
         updateActive {
             copy(
