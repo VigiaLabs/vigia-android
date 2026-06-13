@@ -104,6 +104,7 @@ fun AiOrb(
         OrbState.Alert     -> 1.12f
         OrbState.Offline   -> 0.84f
         OrbState.Searching -> 1.06f
+        OrbState.Listening -> 1.10f   // voice mode — slightly larger than Searching
     }
     val outerScale = animateFloatAsState(
         targetValue   = targetScale,
@@ -190,6 +191,7 @@ fun AiOrb(
         OrbState.Alert     -> "Hazard alert active"
         OrbState.Offline   -> "Device offline"
         OrbState.Searching -> "Searching…"
+        OrbState.Listening -> "Listening…"
     }
 
     // ── Layout ────────────────────────────────────────────────────────────────

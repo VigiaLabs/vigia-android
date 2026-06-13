@@ -40,4 +40,22 @@ object AppModule {
     @Singleton
     @Named("MqttBrokerUri")
     fun provideMqttBrokerUri(): String = BuildConfig.MQTT_BROKER_URI
+
+    /**
+     * VIGIASearch Fargate base URL — sourced from BuildConfig per product flavour.
+     * demo : http://...  (cleartext permitted by demo network_security_config.xml)
+     * prod : https://... (TLS required; no cleartext override present)
+     *
+     * Provided here (in :app) — not in :core:network — so that BuildConfig from the
+     * application module can be read without creating a :core:network → :app dependency.
+     */
+    @Provides
+    @Singleton
+    @Named("VigiaApiBaseUrl")
+    fun provideVigiaApiBaseUrl(): String = BuildConfig.VIGIA_API_BASE_URL
+
+    @Provides
+    @Singleton
+    @Named("SarvamApiKey")
+    fun provideSarvamApiKey(): String = BuildConfig.SARVAM_API_KEY
 }

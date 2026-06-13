@@ -83,10 +83,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
@@ -97,6 +99,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -141,7 +144,6 @@ import com.vigia.feature.copilot.theme.VigiaMotion
 import com.vigia.feature.copilot.theme.VigiaTheme
 import com.vigia.feature.copilot.theme.pressScale
 import com.vigia.feature.copilot.theme.vigiaColors
-import com.vigia.feature.copilot.voice.VoiceCallOverlay
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -177,6 +179,8 @@ internal fun CopilotScreen(
     onLoadSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
     onSignOut: () -> Unit = {},
+    onStartVoice: () -> Unit = {},
+    onEndVoice: () -> Unit = {},
     accountName: String? = null,
     accountEmail: String? = null,
 ) {
@@ -195,6 +199,8 @@ internal fun CopilotScreen(
                 onLoadSession   = onLoadSession,
                 onDeleteSession = onDeleteSession,
                 onSignOut       = onSignOut,
+                onStartVoice    = onStartVoice,
+                onEndVoice      = onEndVoice,
                 accountName     = accountName,
                 accountEmail    = accountEmail,
             )
@@ -257,6 +263,8 @@ private fun ActiveShell(
     onLoadSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
     onSignOut: () -> Unit,
+    onStartVoice: () -> Unit,
+    onEndVoice: () -> Unit,
     accountName: String?,
     accountEmail: String?,
 ) {
@@ -274,8 +282,8 @@ private fun ActiveShell(
     var landingInput by remember { mutableStateOf("") }
     val landingFocus = remember { FocusRequester() }
 
-    // Voice call surface (mic button → full-screen Gemini-style voice UI).
-    var showVoice by remember { mutableStateOf(false) }
+    // Voice call surface is managed by CopilotRoute via ViewModel state.
+    var showProfileSheet by remember { mutableStateOf(false) }
 
     // Reset to Answers whenever a new session is activated (new or loaded from drawer).
     LaunchedEffect(activeSessionId) { chatPager.scrollToPage(ChatTab.Answers.ordinal) }
@@ -333,9 +341,12 @@ private fun ActiveShell(
                     )
                 } else {
                     LandingTopBar(
-                        pagerState  = landingPager,
-                        onMenuClick = { scope.launch { drawerState.open() } },
-                        hazeState   = hazeState,
+                        pagerState     = landingPager,
+                        onMenuClick    = { scope.launch { drawerState.open() } },
+                        onProfileClick = { showProfileSheet = true },
+                        hazeState      = hazeState,
+                        accountName    = accountName,
+                        accountEmail   = accountEmail,
                     )
                 }
             },
@@ -430,7 +441,7 @@ private fun ActiveShell(
                                 text           = landingInput,
                                 onTextChange   = { landingInput = it },
                                 onSubmit       = onSendMessage,
-                                onMicClick     = { showVoice = true },
+                                onMicClick     = onStartVoice,
                                 focusRequester = landingFocus,
                             )
                         }
@@ -439,16 +450,19 @@ private fun ActiveShell(
             }
         }
 
-        // Full-screen voice surface — slides up over everything when the mic is tapped.
-        AnimatedVisibility(
-            visible = showVoice,
-            enter   = fadeIn(tween(VigiaMotion.ENTER_MS)) +
-                      slideInVertically(spring(dampingRatio = VigiaMotion.gentle.dampingRatio,
-                                               stiffness = VigiaMotion.gentle.stiffness)) { it / 6 },
-            exit    = fadeOut(tween(VigiaMotion.EXIT_MS)) +
-                      slideOutVertically(tween(VigiaMotion.EXIT_MS)) { it / 6 },
-        ) {
-            VoiceCallOverlay(onEnd = { showVoice = false })
+        // VoiceCallOverlay is rendered by CopilotRoute above this composable so it
+        // sits in a Box that covers the full screen without being clipped by the scaffold.
+
+        if (showProfileSheet) {
+            ProfileSheet(
+                accountName  = accountName,
+                accountEmail = accountEmail,
+                onSignOut    = {
+                    showProfileSheet = false
+                    onSignOut()
+                },
+                onDismiss    = { showProfileSheet = false },
+            )
         }
       }
     }
@@ -464,7 +478,10 @@ private fun ActiveShell(
 private fun LandingTopBar(
     pagerState: PagerState,
     onMenuClick: () -> Unit,
+    onProfileClick: () -> Unit,
     hazeState: HazeState,
+    accountName: String?,
+    accountEmail: String?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -491,13 +508,38 @@ private fun LandingTopBar(
             ),
         )
 
-        TopBarIconButton(
-            icon               = Icons.Filled.Person,
-            contentDescription = "Open profile",
-            onClick            = {},
-            containerColor     = MaterialTheme.colorScheme.primaryContainer,
-            iconTint           = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        // Avatar button — shows initials when name/email is known, person icon otherwise.
+        val initials = remember(accountName, accountEmail) {
+            val src = accountName ?: accountEmail ?: ""
+            src.split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
+                .ifEmpty { null }
+        }
+        val avatarInteraction = remember { MutableInteractionSource() }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .pressScale(avatarInteraction, pressedScale = 0.88f)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(interactionSource = avatarInteraction, indication = null, onClick = onProfileClick)
+                .semantics { contentDescription = "Open profile" },
+        ) {
+            if (initials != null) {
+                Text(
+                    text  = initials,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            } else {
+                Icon(
+                    imageVector        = Icons.Filled.Person,
+                    contentDescription = null,
+                    tint               = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier           = Modifier.size(20.dp),
+                )
+            }
+        }
     }
 }
 
@@ -864,6 +906,186 @@ private fun DrawerFooterItem(
         )
         Spacer(Modifier.weight(1f))
         if (showSoon) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = CircleShape,
+            ) {
+                Text(
+                    text     = "Soon",
+                    style    = MaterialTheme.typography.labelSmall,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                )
+            }
+        }
+    }
+}
+
+// ── Profile sheet ────────────────────────────────────────────────────────────
+
+/**
+ * Modal bottom sheet showing the signed-in user's identity with sign-out action.
+ * Matches the app's warm palette: avatar circle uses primaryContainer, rows follow
+ * the same padding as [DrawerFooterItem]. The sheet uses [ModalBottomSheet]
+ * which handles scrim, drag handle, and shape out of the box.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileSheet(
+    accountName: String?,
+    accountEmail: String?,
+    onSignOut: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest   = onDismiss,
+        sheetState         = sheetState,
+        containerColor     = MaterialTheme.colorScheme.surface,
+        contentColor       = MaterialTheme.colorScheme.onSurface,
+        dragHandle         = {
+            // Custom drag handle using the outline variant colour for subtlety.
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .size(width = 32.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.outlineVariant),
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+        ) {
+            // ── Avatar + identity ─────────────────────────────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+            ) {
+                // Avatar circle: initials or person icon, primaryContainer fill.
+                val initials = remember(accountName, accountEmail) {
+                    val src = accountName ?: accountEmail ?: ""
+                    src.split(" ").take(2)
+                        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+                        .joinToString("").ifEmpty { null }
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                ) {
+                    if (initials != null) {
+                        Text(
+                            text  = initials,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    } else {
+                        Icon(
+                            imageVector        = Icons.Filled.Person,
+                            contentDescription = null,
+                            tint               = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier           = Modifier.size(28.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(16.dp))
+
+                Column {
+                    Text(
+                        text     = accountName ?: "VIGIA User",
+                        style    = MaterialTheme.typography.titleMedium,
+                        color    = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (accountEmail != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text     = accountEmail,
+                            style    = MaterialTheme.typography.bodySmall,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color    = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            // ── Action rows ───────────────────────────────────────────────────
+            ProfileSheetRow(
+                icon    = Icons.Filled.Settings,
+                label   = "Settings",
+                soon    = true,
+            )
+            ProfileSheetRow(
+                icon  = Icons.Filled.Info,
+                label = "Help & feedback",
+                soon  = true,
+            )
+
+            Spacer(Modifier.height(4.dp))
+            HorizontalDivider(
+                color    = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+
+            ProfileSheetRow(
+                icon      = Icons.AutoMirrored.Filled.Logout,
+                label     = "Sign out",
+                tint      = MaterialTheme.colorScheme.error,
+                onClick   = onSignOut,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileSheetRow(
+    icon: ImageVector,
+    label: String,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    soon: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+    ) {
+        Icon(
+            imageVector        = icon,
+            contentDescription = null,
+            tint               = tint,
+            modifier           = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text  = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = tint,
+        )
+        Spacer(Modifier.weight(1f))
+        if (soon) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = CircleShape,
