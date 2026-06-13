@@ -26,6 +26,8 @@ android {
 
 dependencies {
     implementation(project(":feature:copilot"))
+    implementation(project(":feature:maps"))
+    implementation(libs.osmdroid.android)
     implementation(project(":core:sensor"))
     implementation(project(":core:network"))
     implementation(project(":core:model"))

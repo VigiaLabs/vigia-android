@@ -946,10 +946,7 @@ private fun LandingPager(
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
             )
-            LandingTab.Map -> MapPane(
-                markers  = state.spatialMarkers,
-                modifier = Modifier.fillMaxSize(),
-            )
+            LandingTab.Map -> com.vigia.feature.maps.MapsScreen()
             LandingTab.Wallet -> WalletPane(
                 uiState  = state.walletUiState,
                 modifier = Modifier.fillMaxSize(),
@@ -1053,10 +1050,7 @@ private fun ChatContent(
                 sources  = displaySources,
                 modifier = Modifier.fillMaxSize(),
             )
-            ChatTab.Map -> MapPane(
-                markers  = state.spatialMarkers,
-                modifier = Modifier.fillMaxSize(),
-            )
+            ChatTab.Map -> com.vigia.feature.maps.MapsScreen()
         }
     }
 }

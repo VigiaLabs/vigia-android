@@ -7,6 +7,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":feature:maps"))
+
     // Feature modules access core layers only through interfaces
     implementation(project(":core:network"))
     implementation(project(":core:sensor"))
