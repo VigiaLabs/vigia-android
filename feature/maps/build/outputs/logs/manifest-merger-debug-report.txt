@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml:2:13-83
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml:2:13-83
+	package
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml
+	xmlns:android
+		ADDED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml:2:23-81
+uses-sdk
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml reason: use-sdk injection requested
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml
+INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml
+	android:targetSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml
+	android:minSdkVersion
+		INJECTED from /Users/tommathew/AndroidStudioProjects/vigia2/.claude/worktrees/intelligent-lederberg-e8a34f/feature/maps/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6279583222668495185.xml
