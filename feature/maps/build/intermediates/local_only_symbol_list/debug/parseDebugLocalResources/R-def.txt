@@ -1,0 +1,17 @@
+R_DEF: Internal format may change without notice
+local
+string maps_ble_connected
+string maps_ble_disconnected
+string maps_hazard_critical_desc
+string maps_hazard_high_desc
+string maps_hazard_low_desc
+string maps_hazard_medium_desc
+string maps_no_alerts
+string maps_no_location
+string maps_orb_desc
+string maps_route_calculating
+string maps_search_placeholder
+string maps_tab_alerts
+string maps_tab_route
+string maps_tab_traces
+string maps_tab_zones

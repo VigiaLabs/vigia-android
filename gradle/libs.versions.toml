@@ -46,6 +46,9 @@ amplify                     = "2.19.1"
 credentials                 = "1.3.0"
 googleid                    = "1.1.1"
 
+# OSMDroid — zero-cost map engine (no API key), OpenStreetMap tiles
+osmdroid                    = "6.1.20"
+
 # Test
 junit                       = "4.13.2"
 junitExt                    = "1.3.0"
@@ -126,6 +129,9 @@ amplify-auth-cognito = { group = "com.amplifyframework", name = "aws-auth-cognit
 androidx-credentials                = { group = "androidx.credentials", name = "credentials",                    version.ref = "credentials" }
 androidx-credentials-play-services  = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 google-identity-googleid            = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+
+# ── OSMDroid ──
+osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 
 # ── Coroutines ──
 kotlinx-coroutines-core    = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core",    version.ref = "coroutines" }

@@ -1,0 +1,1 @@
+-keep,allowobfuscation,allowshrinking class com.vigia.feature.maps.MapsViewModel
