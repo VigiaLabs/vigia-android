@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -104,15 +103,12 @@ internal fun VoiceCallOverlay(
         label         = "voice_activity",
     )
 
-    val bg = MaterialTheme.colorScheme.background
-    val isDark = bg.luminance() < 0.5f
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(bg),
+            .background(Color(0xFF07060A)),
     ) {
-        AuroraMist(activity = activity, isDark = isDark, modifier = Modifier.fillMaxSize())
+        AuroraMist(activity = activity, modifier = Modifier.fillMaxSize())
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -127,7 +123,7 @@ internal fun VoiceCallOverlay(
             Text(
                 text  = "VIGIA Voice",
                 style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = Color.White,
             )
             Spacer(Modifier.height(6.dp))
 
@@ -145,7 +141,7 @@ internal fun VoiceCallOverlay(
                         VoiceListeningState.Idle       -> ""
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                    color = Color.White.copy(alpha = 0.65f),
                 )
             }
 
@@ -175,7 +171,7 @@ internal fun VoiceCallOverlay(
                         VoiceListeningState.Idle       -> ""
                     },
                     style     = MaterialTheme.typography.labelMedium,
-                    color     = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+                    color     = Color.White.copy(alpha = 0.45f),
                     textAlign = TextAlign.Center,
                 )
             }
@@ -327,7 +323,6 @@ private class AuroraBlob(
 @Composable
 private fun AuroraMist(
     activity: State<Float>,
-    isDark: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val ext        = MaterialTheme.vigiaColors
@@ -368,17 +363,13 @@ private fun AuroraMist(
         )
     }
 
-    val blurPx      = with(LocalDensity.current) { 72.dp.toPx() }
-    val bgColor     = MaterialTheme.colorScheme.background
-    val floorScrim  = remember(bgColor) {
-        Brush.verticalGradient(0.72f to Color.Transparent, 1.0f to bgColor)
+    val blurPx     = with(LocalDensity.current) { 72.dp.toPx() }
+    val floorScrim = remember {
+        Brush.verticalGradient(0.72f to Color.Transparent, 1.0f to Color(0xFF07060A))
     }
-
-    // Dark mode: additive Plus blend for glow-on-black. Light mode: SrcOver for pastel wash.
-    val blobBlend   = if (isDark) BlendMode.Plus else BlendMode.SrcOver
-    val blobAlpha   = if (isDark) 0.54f else 0.22f
-    val coreAlpha   = if (isDark) 0.72f else 0.28f
-    val hotAlpha    = if (isDark) 0.56f else 0.20f
+    val blobAlpha  = 0.54f
+    val coreAlpha  = 0.72f
+    val hotAlpha   = 0.56f
 
     Box(modifier) {
         Canvas(
@@ -407,7 +398,7 @@ private fun AuroraMist(
                         listOf(color.copy(alpha = blobAlpha * dim), Color.Transparent),
                         center = c, radius = r,
                     ),
-                    radius = r, center = c, blendMode = blobBlend,
+                    radius = r, center = c, blendMode = BlendMode.Plus,
                 )
             }
 
@@ -425,7 +416,7 @@ private fun AuroraMist(
                         ),
                         center = coreC, radius = coreR,
                     ),
-                    radius = coreR, center = coreC, blendMode = blobBlend,
+                    radius = coreR, center = coreC, blendMode = BlendMode.Plus,
                 )
             }
             val hotR = w * 0.42f * sw
@@ -435,7 +426,7 @@ private fun AuroraMist(
                         listOf(icy.copy(alpha = hotAlpha * dim), Color.Transparent),
                         center = coreC, radius = hotR,
                     ),
-                    radius = hotR, center = coreC, blendMode = blobBlend,
+                    radius = hotR, center = coreC, blendMode = BlendMode.Plus,
                 )
             }
         }
