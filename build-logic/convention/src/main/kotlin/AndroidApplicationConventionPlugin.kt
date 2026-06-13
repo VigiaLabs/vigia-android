@@ -46,8 +46,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                             "\"${secret("VIGIA_API_BASE_URL")}\"")
                         buildConfigField("String", "BLACKBOX_MAC",
                             "\"${secret("BLACKBOX_MAC", "00:00:00:00:00:00")}\"")
+                        buildConfigField("String", "SARVAM_API_KEY",
+                            "\"${secret("SARVAM_API_KEY")}\"")
                     }
-                    // prod — set all four env vars in CI; secrets.properties is not present
+                    // prod — set all env vars in CI; secrets.properties is not present
                     //         in CI runners, so env vars are the sole source.
                     create("prod") {
                         dimension = "env"
@@ -59,6 +61,8 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                             "\"${secret("VIGIA_API_BASE_URL")}\"")
                         buildConfigField("String", "BLACKBOX_MAC",
                             "\"${secret("BLACKBOX_MAC")}\"")
+                        buildConfigField("String", "SARVAM_API_KEY",
+                            "\"${secret("SARVAM_API_KEY")}\"")
                     }
                 }
             }

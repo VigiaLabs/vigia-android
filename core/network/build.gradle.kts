@@ -5,6 +5,7 @@ plugins {
 
 android {
     namespace = "com.vigia.core.network"
+    buildFeatures { buildConfig = true }
 }
 
 dependencies {

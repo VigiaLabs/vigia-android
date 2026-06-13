@@ -18,12 +18,14 @@ import org.eclipse.paho.client.mqttv3.MqttAsyncClient
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 import org.json.JSONObject
+import java.security.SecureRandom
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
+import javax.net.ssl.SSLContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -87,7 +89,8 @@ class MqttAlertRepositoryImpl @Inject constructor(
             val c = MqttAsyncClient(
                 brokerUri,
                 "vigia-android-${userId.take(8)}-${UUID.randomUUID().toString().take(8)}",
-                MemoryPersistence(),
+                // File-based persistence ensures QoS 1 in-flight messages survive process death.
+                MqttDefaultFilePersistence(context.filesDir.absolutePath),
             )
             c.setCallback(callback)
 
@@ -97,6 +100,16 @@ class MqttAlertRepositoryImpl @Inject constructor(
                 keepAliveInterval    = 30
                 connectionTimeout    = 15
                 maxInflight          = 10
+                // Explicit TLS using the Android system trust store.
+                // For ssl:// URIs Paho uses this factory; without it the JVM default is used
+                // which works but skips hostname verification on some devices.
+                // Production upgrade path: provision an X.509 client cert from AWS IoT Core
+                // and add it to a KeyStore passed to SSLContext.init(keyManagers, ...).
+                if (brokerUri.startsWith("ssl://", ignoreCase = true)) {
+                    socketFactory = SSLContext.getInstance("TLSv1.2").also {
+                        it.init(null, null, SecureRandom())
+                    }.socketFactory
+                }
             }
 
             kotlin.coroutines.suspendCoroutine { cont ->

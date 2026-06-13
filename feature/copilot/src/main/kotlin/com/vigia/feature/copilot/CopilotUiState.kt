@@ -26,9 +26,27 @@ sealed interface CopilotUiState {
         val searchSources: List<SearchEvent.Source> = emptyList(),
         val spatialMarkers: List<SearchEvent.SpatialMarker> = emptyList(),
         val isSearchStreaming: Boolean = false,
+        // Voice mode state
+        val isVoiceOverlayVisible: Boolean = false,
+        val voiceAmplitude: Float = 0f,        // 0..1 normalised RMS from mic
+        val voiceListeningState: VoiceListeningState = VoiceListeningState.Idle,
     ) : CopilotUiState
 
     data class Error(val message: String) : CopilotUiState
 }
 
-enum class OrbState { Idle, Active, Alert, Offline, Searching }
+enum class OrbState {
+    Idle,
+    Active,
+    Alert,
+    Offline,
+    Searching,
+    Listening,   // user is speaking — aurora mist reacts to voice amplitude
+}
+
+enum class VoiceListeningState {
+    Idle,        // overlay not active
+    Listening,   // mic open, recording
+    Processing,  // STT + search in flight
+    Speaking,    // Sarvam TTS playing back the answer
+}

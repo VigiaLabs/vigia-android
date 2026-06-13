@@ -1,7 +1,12 @@
 package com.vigia.core.network.di
 
+import com.vigia.core.network.BuildConfig
 import com.vigia.core.network.mqtt.MqttAlertRepository
 import com.vigia.core.network.mqtt.MqttAlertRepositoryImpl
+import com.vigia.core.network.sarvam.SarvamSttClient
+import com.vigia.core.network.sarvam.SarvamSttClientImpl
+import com.vigia.core.network.sarvam.SarvamTtsClient
+import com.vigia.core.network.sarvam.SarvamTtsClientImpl
 import com.vigia.core.network.search.OkHttpSseSearchClient
 import com.vigia.core.network.search.VigiaSearchClient
 import com.vigia.core.network.stripe.StripePayRepository
@@ -12,8 +17,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
-import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -32,6 +37,12 @@ abstract class NetworkModule {
     @Binds @Singleton
     abstract fun bindStripePayRepository(impl: StripePayRepositoryImpl): StripePayRepository
 
+    @Binds @Singleton
+    abstract fun bindSarvamTtsClient(impl: SarvamTtsClientImpl): SarvamTtsClient
+
+    @Binds @Singleton
+    abstract fun bindSarvamSttClient(impl: SarvamSttClientImpl): SarvamSttClient
+
     // ── companion: @Provides cannot live in abstract class directly ───────────
 
     companion object {
@@ -46,23 +57,24 @@ abstract class NetworkModule {
          */
         @Provides
         @Singleton
-        fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .callTimeout(0, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
+        fun provideOkHttpClient(): OkHttpClient {
+            val logging = HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                        else HttpLoggingInterceptor.Level.NONE
+            }
+            return OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(0, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .addInterceptor(logging)
+                .build()
+        }
 
-        /**
-         * Injected as @Named("VigiaApiBaseUrl") to avoid a bare String binding collision.
-         * Value comes from BuildConfig.VIGIA_API_BASE_URL set per product flavour.
-         */
-        @Provides
-        @Singleton
-        @Named("VigiaApiBaseUrl")
-        fun provideVigiaApiBaseUrl(): String =
-            "http://vigia-ts-search-204472952.us-east-1.elb.amazonaws.com"
+        // @Named("VigiaApiBaseUrl") is provided by :app's AppModule so that
+        // BuildConfig.VIGIA_API_BASE_URL (set per product flavour in secrets.properties / CI env)
+        // can be injected here without creating a compile-time dependency from :core:network → :app.
 
     }
 }

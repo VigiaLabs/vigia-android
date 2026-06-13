@@ -1,5 +1,6 @@
 package com.vigia.core.network.fcm
 
+import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.vigia.core.model.HazardAlert
@@ -10,8 +11,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * FCM push receiver — two responsibilities:
@@ -36,6 +43,8 @@ import javax.inject.Inject
 class VigiaFcmReceiver : FirebaseMessagingService() {
 
     @Inject lateinit var mqttAlertRepository: MqttAlertRepository
+    @Inject lateinit var okHttpClient: OkHttpClient
+    @Inject @Named("VigiaApiBaseUrl") lateinit var baseUrl: String
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -53,11 +62,29 @@ class VigiaFcmReceiver : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        // TODO: upload token to backend so FCM can reach this device.
-        // Token should be sent to: POST /v1/device/register  { fcmToken: token }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply { put("fcmToken", token) }
+                    .toString()
+                    .toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("$baseUrl/v1/device/register")
+                    .post(body)
+                    .build()
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.w(TAG, "FCM token registration failed: HTTP ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "FCM token registration error: ${e.message}")
+            }
+        }
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    private companion object { const val TAG = "VigiaFcm" }
 
     private fun buildAlert(data: Map<String, String>): HazardAlert? {
         val message = data["message"] ?: return null
