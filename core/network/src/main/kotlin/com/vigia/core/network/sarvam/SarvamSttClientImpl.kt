@@ -42,7 +42,7 @@ class SarvamSttClientImpl @Inject constructor(
                 filename = "audio.wav",
                 body     = wavBytes.toRequestBody(WAV_MEDIA),
             )
-            .addFormDataPart("model", "saarika:v2")
+            .addFormDataPart("model", "saarika:v2.5")
             .addFormDataPart("with_timestamps", "false")
 
         // Only send language_code when the caller specifies a real BCP-47 code.
