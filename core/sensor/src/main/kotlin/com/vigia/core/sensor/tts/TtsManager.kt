@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,6 +58,33 @@ class TtsManager @Inject constructor(
 
     @Volatile private var activeTrack: AudioTrack? = null
 
+    private data class SpeechItem(
+        val text: String,
+        val languageCode: String,
+        val onDone: () -> Unit,
+    )
+
+    // Unlimited channel — items are drained sequentially by a single coroutine so
+    // step narrations and the final answer always play in arrival order.
+    private val speechQueue = Channel<SpeechItem>(Channel.UNLIMITED)
+
+    init {
+        scope.launch {
+            for (item in speechQueue) {
+                try {
+                    val wav = sarvamTtsClient.synthesize(item.text, item.languageCode)
+                    playWavAndAwait(wav)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Sarvam TTS failed, falling back to Android TTS: ${e.message}")
+                    _isSpeaking.value = false
+                    speak(item.text, TextToSpeech.QUEUE_ADD)
+                } finally {
+                    item.onDone()
+                }
+            }
+        }
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             androidTts.language = Locale.US
@@ -65,11 +93,11 @@ class TtsManager @Inject constructor(
     }
 
     /**
-     * Speaks [text] using Sarvam AI's natural voice.
-     * Non-blocking — launches a coroutine on the IO dispatcher.
-     * [onDone] is invoked on the IO thread after playback finishes (or immediately
-     * on error so the caller is never stranded waiting). Use it to restart the mic
-     * for the next conversational turn.
+     * Enqueues [text] for Sarvam AI voice synthesis.
+     * Items are played sequentially in arrival order — callers can enqueue step
+     * narrations and the final answer in one pass and they will play back-to-back
+     * without overlap. [onDone] fires on the IO thread after this specific item
+     * finishes playing (use it to reopen the mic on the last item).
      */
     fun speakSarvam(
         text: String,
@@ -77,18 +105,7 @@ class TtsManager @Inject constructor(
         onDone: () -> Unit = {},
     ) {
         if (text.isBlank()) { onDone(); return }
-        scope.launch {
-            try {
-                val wav = sarvamTtsClient.synthesize(text, languageCode)
-                playWavAndAwait(wav)
-            } catch (e: Exception) {
-                Log.w(TAG, "Sarvam TTS failed, falling back to Android TTS: ${e.message}")
-                _isSpeaking.value = false
-                speak(text, TextToSpeech.QUEUE_ADD)
-            } finally {
-                onDone()
-            }
-        }
+        speechQueue.trySend(SpeechItem(text, languageCode, onDone))
     }
 
     /**
@@ -104,6 +121,12 @@ class TtsManager @Inject constructor(
     fun stop() {
         androidTts.stop()
         stopTrack()
+        // Drain queued items and fire their onDone callbacks so the ViewModel
+        // is never stranded waiting for a mic-reopen signal.
+        while (true) {
+            val item = speechQueue.tryReceive().getOrNull() ?: break
+            item.onDone()
+        }
     }
 
     fun shutdown() {

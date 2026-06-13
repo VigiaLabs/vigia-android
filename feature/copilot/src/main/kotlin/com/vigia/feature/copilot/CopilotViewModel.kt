@@ -364,13 +364,21 @@ class CopilotViewModel @Inject constructor(
             try {
                 searchClient.search(context).collect { event ->
                     when (event) {
-                        is SearchEvent.Step ->
+                        is SearchEvent.Step -> {
+                            val isVoice = (_uiState.value as? CopilotUiState.Active)
+                                ?.isVoiceOverlayVisible == true
                             updateActive {
                                 copy(
                                     searchStep     = event.message,
                                     completedSteps = completedSteps + event.message,
                                 )
                             }
+                            // During voice sessions narrate each reasoning step so
+                            // the user hears the agent thinking before the answer plays.
+                            if (isVoice && event.message.isNotBlank()) {
+                                ttsManager.speakSarvam(event.message)
+                            }
+                        }
 
                         is SearchEvent.TextDelta ->
                             updateActive { copy(searchAnswer = searchAnswer + event.delta) }
