@@ -94,7 +94,7 @@ internal fun VoiceCallOverlay(
     val targetActivity = when (listeningState) {
         VoiceListeningState.Listening  -> 0.38f + voiceAmplitude * 0.62f
         VoiceListeningState.Processing -> 0.52f
-        VoiceListeningState.Speaking   -> 0.78f
+        VoiceListeningState.Speaking   -> 0.42f + voiceAmplitude * 0.58f   // real TTS amplitude
         VoiceListeningState.Idle       -> 0.28f
     }
     val activity = animateFloatAsState(
@@ -285,10 +285,10 @@ private fun OrbSendButton(
                 .graphicsLayer {
                     val simulated = 0.55f * a + 0.45f * b
                     val amp = when (listeningState) {
-                        VoiceListeningState.Listening ->
+                        VoiceListeningState.Listening,
+                        VoiceListeningState.Speaking  ->
                             voiceAmplitude * 0.72f + simulated * (1f - voiceAmplitude) * 0.28f
-                        VoiceListeningState.Speaking  -> simulated * 0.50f   // gentle breathing
-                        else                          -> simulated * 0.20f   // minimal motion
+                        else -> simulated * 0.20f   // minimal motion
                     }
                     val s = 1f + amp * 0.24f
                     scaleX = s; scaleY = s

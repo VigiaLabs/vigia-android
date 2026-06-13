@@ -118,6 +118,7 @@ class CopilotViewModel @Inject constructor(
 
         observeSensorContext()
         observeAlerts()
+        observeTtsAmplitude()
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -299,9 +300,10 @@ class CopilotViewModel @Inject constructor(
         startVoiceMode()
     }
 
-    /** Cancels recording and hides the overlay without sending a message. */
+    /** Cancels recording, stops any queued/active TTS, and hides the overlay. */
     fun dismissVoiceOverlay() {
         voiceAmplitudeMonitor.stopSilently()
+        ttsManager.stop()
         updateActive {
             copy(
                 isVoiceOverlayVisible = false,
@@ -313,6 +315,20 @@ class CopilotViewModel @Inject constructor(
     }
 
     // ── Private observers ─────────────────────────────────────────────────────
+
+    // Feeds TTS playback amplitude into voiceAmplitude during Speaking state so the
+    // orb and aurora animate to the AI's voice exactly like they do to the user's.
+    private fun observeTtsAmplitude() {
+        viewModelScope.launch {
+            ttsManager.ttsAmplitude.collect { amp ->
+                updateActive {
+                    if (voiceListeningState == VoiceListeningState.Speaking) {
+                        copy(voiceAmplitude = amp)
+                    } else this
+                }
+            }
+        }
+    }
 
     private fun observeSensorContext() {
         viewModelScope.launch {
@@ -488,6 +504,19 @@ class CopilotViewModel @Inject constructor(
                         searchStep        = "",
                         searchAnswer      = "",
                     )
+                }
+            } finally {
+                // Safety net: if the stream ever completes without delivering a
+                // Done event (early server close, dropped terminal event), make
+                // sure the "Generating response" indicator is never left stuck on.
+                if ((_uiState.value as? CopilotUiState.Active)?.isSearchStreaming == true) {
+                    updateActive {
+                        copy(
+                            orbState          = OrbState.Active,
+                            isSearchStreaming = false,
+                            searchStep        = "",
+                        )
+                    }
                 }
             }
         }

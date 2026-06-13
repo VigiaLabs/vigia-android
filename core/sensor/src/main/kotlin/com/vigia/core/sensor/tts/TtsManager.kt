@@ -23,6 +23,7 @@ import java.nio.ByteOrder
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.sqrt
 
 /**
  * Two-tier speech output:
@@ -52,6 +53,9 @@ class TtsManager @Inject constructor(
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    private val _ttsAmplitude = MutableStateFlow(0f)
+    val ttsAmplitude: StateFlow<Float> = _ttsAmplitude.asStateFlow()
 
     private val androidTts: TextToSpeech = TextToSpeech(context, this)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -145,12 +149,14 @@ class TtsManager @Inject constructor(
     private suspend fun playWavAndAwait(wav: ByteArray) {
         if (wav.size < 44) return
 
-        val buf = ByteBuffer.wrap(wav).order(ByteOrder.LITTLE_ENDIAN)
-        buf.position(24); val sampleRate    = buf.int
-        buf.position(34); val bitsPerSample = buf.short.toInt()
+        val header = ByteBuffer.wrap(wav).order(ByteOrder.LITTLE_ENDIAN)
+        header.position(24); val sampleRate    = header.int
+        header.position(34); val bitsPerSample = header.short.toInt()
 
-        val encoding = if (bitsPerSample == 16) AudioFormat.ENCODING_PCM_16BIT
-                       else AudioFormat.ENCODING_PCM_8BIT
+        val encoding      = if (bitsPerSample == 16) AudioFormat.ENCODING_PCM_16BIT
+                            else AudioFormat.ENCODING_PCM_8BIT
+        val bytesPerFrame = if (bitsPerSample == 16) 2 else 1
+        val windowFrames  = sampleRate / 10   // 100 ms RMS window
 
         stopTrack()  // release any previous track first
 
@@ -178,13 +184,30 @@ class TtsManager @Inject constructor(
         _isSpeaking.value = true
         try {
             track.play()
-            // Poll until the AudioTrack drains all static PCM samples.
-            // PLAYSTATE_PLAYING transitions to PLAYSTATE_STOPPED when done.
             while (runCatching { track.playState }.getOrDefault(AudioTrack.PLAYSTATE_STOPPED)
                    == AudioTrack.PLAYSTATE_PLAYING) {
+                // Compute RMS of the 100 ms PCM window around the current playhead
+                // so the UI can animate the orb and aurora to the AI's voice level.
+                val headFrame  = track.playbackHeadPosition
+                val startByte  = ((headFrame - windowFrames / 2) * bytesPerFrame)
+                    .coerceAtLeast(0)
+                val endByte    = ((headFrame + windowFrames / 2) * bytesPerFrame)
+                    .coerceAtMost(wav.size - 44)
+                if (endByte > startByte && bytesPerFrame == 2) {
+                    var sumSq = 0.0; var count = 0; var i = startByte + 44
+                    while (i + 1 < endByte + 44) {
+                        val lo = wav[i].toInt() and 0xFF
+                        val hi = wav[i + 1].toInt()
+                        val sample = ((hi shl 8) or lo).toShort().toFloat()
+                        sumSq += sample * sample; count++; i += 2
+                    }
+                    _ttsAmplitude.value = if (count > 0)
+                        (sqrt(sumSq / count).toFloat() / 32768f).coerceIn(0f, 1f) else 0f
+                }
                 delay(80)
             }
         } finally {
+            _ttsAmplitude.value = 0f
             _isSpeaking.value = false
             if (activeTrack === track) activeTrack = null
             runCatching { track.release() }
@@ -195,6 +218,7 @@ class TtsManager @Inject constructor(
         val t = activeTrack ?: return
         activeTrack = null
         _isSpeaking.value = false
+        _ttsAmplitude.value = 0f
         if (t.state == AudioTrack.STATE_INITIALIZED) runCatching { t.stop() }
         runCatching { t.release() }
     }
