@@ -1,1 +1,2 @@
 com.vigia.core.auth
+string vigia_google_web_client_id
