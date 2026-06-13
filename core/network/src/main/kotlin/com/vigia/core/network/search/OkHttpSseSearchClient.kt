@@ -2,8 +2,11 @@ package com.vigia.core.network.search
 
 import com.vigia.core.model.VigiaSearchContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -76,7 +79,13 @@ class OkHttpSseSearchClient @Inject constructor(
                             line.isEmpty() && dataBuffer.isNotEmpty() -> {
                                 val event = parseEvent(currentEvent, dataBuffer.toString())
                                 if (event != null) {
-                                    trySend(event)
+                                    // trySendBlocking (not trySend) so a fast burst of
+                                    // text deltas can never overflow the channel and
+                                    // silently drop events — most importantly the final
+                                    // Done event, whose loss left the UI stuck on
+                                    // "Generating response". Paired with an UNLIMITED
+                                    // buffer below, this never actually blocks.
+                                    trySendBlocking(event)
                                     if (event is SearchEvent.Done) {
                                         close()
                                         return@withContext
@@ -97,6 +106,10 @@ class OkHttpSseSearchClient @Inject constructor(
 
         awaitClose { call.cancel() }
     }
+        // UNLIMITED capacity fuses with callbackFlow's internal channel so the
+        // server's sub-second burst of ~200+ text deltas is fully buffered and
+        // no event (especially Done) is ever dropped under back-pressure.
+        .buffer(Channel.UNLIMITED)
 
     // ── SSE parsing ───────────────────────────────────────────────────────────
 
