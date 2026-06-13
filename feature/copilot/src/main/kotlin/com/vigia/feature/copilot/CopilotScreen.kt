@@ -5,7 +5,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -58,6 +61,10 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Close
@@ -128,7 +135,6 @@ import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.MessageRole
 import com.vigia.core.model.MessageStatus
 import com.vigia.core.network.search.SearchEvent
-import com.vigia.core.network.stripe.PayoutStatus
 import com.vigia.feature.copilot.orb.AiOrb
 import com.vigia.feature.copilot.theme.AnswerBodyStyle
 import com.vigia.feature.copilot.theme.VigiaMotion
@@ -945,8 +951,8 @@ private fun LandingPager(
                 modifier = Modifier.fillMaxSize(),
             )
             LandingTab.Wallet -> WalletPane(
-                payoutStatus = state.payoutStatus,
-                modifier     = Modifier.fillMaxSize(),
+                uiState  = state.walletUiState,
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
@@ -1843,94 +1849,417 @@ private fun ProfileRow(label: String, value: String, dotColor: Color?) {
 // ── Wallet pane ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun WalletPane(payoutStatus: PayoutStatus, modifier: Modifier = Modifier) {
-    val (headline, detail, accentDot) = when (payoutStatus) {
-        PayoutStatus.Idle ->
-            Triple("Wallet ready", "No pending payouts. Earnings from verified hazard reports land here.", false)
-        PayoutStatus.AwaitingOnboarding ->
-            Triple("Finish setup", "Connect a payout account to start receiving earnings.", true)
-        PayoutStatus.OnboardingInProgress ->
-            Triple("Setup in progress", "We're verifying your payout details — this usually takes a moment.", true)
-        is PayoutStatus.OnboardingComplete ->
-            Triple("Payouts enabled", "Account ${payoutStatus.accountId.take(12)}… is ready to receive funds.", false)
-        is PayoutStatus.PaymentPending ->
-            Triple(
-                "Payout pending",
-                "%.2f %s on its way to your account.".format(
-                    payoutStatus.amountCents / 100.0,
-                    payoutStatus.currency.uppercase(),
-                ),
-                true,
-            )
-        is PayoutStatus.PaymentSucceeded ->
-            Triple("Payout sent", "Charge ${payoutStatus.chargeId.take(12)}… completed successfully.", false)
-        is PayoutStatus.Failed ->
-            Triple("Payout issue", payoutStatus.userMessage, true)
-    }
+private fun WalletPane(uiState: WalletUiState, modifier: Modifier = Modifier) {
+    val animatedBalance by animateFloatAsState(
+        targetValue   = uiState.balanceVga.toFloat(),
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label         = "vgaBalance",
+    )
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 40.dp),
+        modifier       = modifier,
     ) {
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text  = "Wallet",
-            style = MaterialTheme.typography.displaySmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(20.dp))
+        item {
+            Spacer(Modifier.height(24.dp))
+            Text(
+                text     = "Wallet",
+                style    = MaterialTheme.typography.displaySmall,
+                color    = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+            Spacer(Modifier.height(20.dp))
+            BalanceHeroCard(
+                balance   = animatedBalance,
+                publicKey = uiState.publicKey,
+                isSyncing = uiState.isSyncing,
+                modifier  = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            WalletActionRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+        }
 
-        Surface(
-            color           = MaterialTheme.vigiaColors.glassSurface,
-            shape           = MaterialTheme.shapes.extraLarge,
-            shadowElevation = 2.dp,
-            modifier        = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier          = Modifier.padding(20.dp),
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = CircleShape,
+        if (uiState.pendingRewards.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(24.dp))
+                WalletSectionLabel(
+                    text     = "Pending Rewards",
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            items(uiState.pendingRewards, key = { it.detectionId }) { reward ->
+                PendingRewardRow(
+                    reward   = reward,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(bottom = 8.dp),
+                )
+            }
+        }
+
+        if (uiState.recentActivity.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(24.dp))
+                WalletSectionLabel(
+                    text     = "Recent Activity",
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            items(uiState.recentActivity, key = { it.txSignature }) { tx ->
+                ActivityFeedItem(
+                    tx       = tx,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(bottom = 8.dp),
+                )
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(32.dp))
+            SolanaFooter(modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun BalanceHeroCard(
+    balance: Float,
+    publicKey: String,
+    isSyncing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val vgaGold          = MaterialTheme.vigiaColors.vgaGold
+
+    Surface(
+        color           = MaterialTheme.vigiaColors.glassSurface,
+        shape           = MaterialTheme.shapes.extraLarge,
+        shadowElevation = 2.dp,
+        modifier        = modifier,
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // VGA coin icon — amber ring with Solana ◎ symbol
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier         = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(vgaGold.copy(alpha = 0.12f))
+                        .border(1.dp, vgaGold.copy(alpha = 0.45f), CircleShape),
                 ) {
-                    Icon(
-                        imageVector        = Icons.Filled.AccountBalanceWallet,
-                        contentDescription = null,
-                        tint               = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier           = Modifier.size(48.dp).padding(12.dp),
+                    Text(
+                        text  = "◎",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = vgaGold,
                     )
                 }
                 Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (accentDot) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.vigiaColors.warningAccent),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
+                Column {
+                    Row(verticalAlignment = Alignment.Bottom) {
                         Text(
-                            text  = headline,
-                            style = MaterialTheme.typography.titleMedium,
+                            text  = "%,.6f".format(balance),
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                            ),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text     = "\$VGA",
+                            style    = MaterialTheme.typography.labelLarge,
+                            color    = vgaGold,
+                            modifier = Modifier.padding(bottom = 3.dp),
+                        )
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text  = detail,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                color       = MaterialTheme.colorScheme.onSurfaceVariant,
+                                strokeWidth = 1.5.dp,
+                                modifier    = Modifier.size(10.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            text  = "Solana Devnet",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color    = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(vertical = 14.dp),
+            )
+
+            // Address row with copy button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier          = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text     = if (publicKey.length > 16)
+                        "${publicKey.take(8)}…${publicKey.takeLast(6)}"
+                    else
+                        publicKey.ifEmpty { "—" },
+                    style    = MaterialTheme.typography.bodyMedium,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                if (publicKey.isNotEmpty()) {
+                    Surface(
+                        shape    = MaterialTheme.shapes.small,
+                        color    = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.clickable {
+                            clipboardManager.setText(AnnotatedString(publicKey))
+                        },
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier          = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Filled.ContentCopy,
+                                contentDescription = "Copy address",
+                                tint               = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier           = Modifier.size(13.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text  = "Copy",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WalletActionRow(modifier: Modifier = Modifier) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier              = modifier,
+    ) {
+        WalletActionChip(
+            icon     = Icons.Filled.QrCode,
+            label    = "Receive",
+            modifier = Modifier.weight(1f),
+        )
+        WalletActionChip(
+            icon     = Icons.Filled.LocalFireDepartment,
+            label    = "Burn",
+            modifier = Modifier.weight(1f),
+        )
+        WalletActionChip(
+            icon     = Icons.Filled.FileUpload,
+            label    = "Export",
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun WalletActionChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+) {
+    Surface(
+        shape    = MaterialTheme.shapes.large,
+        color    = MaterialTheme.vigiaColors.glassSurface,
+        border   = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .defaultMinSize(minHeight = 64.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier            = Modifier.padding(vertical = 14.dp),
+        ) {
+            Icon(
+                imageVector        = icon,
+                contentDescription = null,
+                tint               = MaterialTheme.colorScheme.onSurface,
+                modifier           = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                text  = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WalletSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text     = text.uppercase(),
+        style    = MaterialTheme.typography.labelSmall,
+        color    = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun PendingRewardRow(reward: PendingReward, modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pendingPulse")
+    val dotAlpha by infiniteTransition.animateFloat(
+        initialValue  = 0.35f,
+        targetValue   = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "dotAlpha",
+    )
+    val vgaGold = MaterialTheme.vigiaColors.vgaGold
+
+    Surface(
+        color           = MaterialTheme.vigiaColors.glassSurface,
+        shape           = MaterialTheme.shapes.large,
+        shadowElevation = 1.dp,
+        modifier        = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier          = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(vgaGold.copy(alpha = dotAlpha)),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text  = "+${"%.3f".format(reward.amountVga)} VGA",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = vgaGold,
+                )
+                Text(
+                    text  = reward.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text  = walletRelativeTime(reward.timestampMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActivityFeedItem(tx: WalletActivity, modifier: Modifier = Modifier) {
+    val (sign, tint, icon) = when (tx.type) {
+        WalletActivity.Type.MINT -> Triple("+", MaterialTheme.vigiaColors.success, Icons.Filled.CheckCircle)
+        WalletActivity.Type.BURN -> Triple("–", MaterialTheme.colorScheme.error, Icons.Filled.LocalFireDepartment)
+    }
+
+    Surface(
+        color           = MaterialTheme.vigiaColors.glassSurface,
+        shape           = MaterialTheme.shapes.large,
+        shadowElevation = 1.dp,
+        modifier        = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier          = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Icon(
+                imageVector        = icon,
+                contentDescription = null,
+                tint               = tint,
+                modifier           = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text  = "$sign${"%.3f".format(tx.amountVga)} VGA",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = tint,
+                )
+                Text(
+                    text     = tx.label,
+                    style    = MaterialTheme.typography.bodySmall,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text  = "${tx.txSignature.take(8)}…${tx.txSignature.takeLast(4)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text  = walletRelativeTime(tx.timestampMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SolanaFooter(modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier              = modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+    ) {
+        HorizontalDivider(
+            color    = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text     = "  Powered by Solana  ",
+            style    = MaterialTheme.typography.labelSmall,
+            color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+        )
+        HorizontalDivider(
+            color    = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+private fun walletRelativeTime(timestampMs: Long): String {
+    val diff = System.currentTimeMillis() - timestampMs
+    return when {
+        diff < 60_000L      -> "just now"
+        diff < 3_600_000L   -> "${diff / 60_000}m ago"
+        diff < 86_400_000L  -> "${diff / 3_600_000}h ago"
+        else                -> "${diff / 86_400_000}d ago"
     }
 }
 

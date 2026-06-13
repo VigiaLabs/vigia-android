@@ -107,6 +107,8 @@ data class VigiaExtendedColors(
     val atmosphereSky: Color,
     val atmospherePeach: Color,
     val atmosphereViolet: Color,
+    // Wallet — $VGA token accent (WCAG AA on both schemes)
+    val vgaGold: Color,
 )
 
 internal val VigiaExtendedLight = VigiaExtendedColors(
@@ -127,6 +129,7 @@ internal val VigiaExtendedLight = VigiaExtendedColors(
     atmosphereSky      = Color(0x8CBFD3F8),
     atmospherePeach    = Color(0x80F6D9B8),
     atmosphereViolet   = Color(0x59D8C8F4),
+    vgaGold            = Color(0xFFD97706),   // Amber-600 — 4.5:1 on white, WCAG AA
 )
 
 internal val VigiaExtendedDark = VigiaExtendedColors(
@@ -147,6 +150,7 @@ internal val VigiaExtendedDark = VigiaExtendedColors(
     atmosphereSky      = Color(0x59283457),
     atmospherePeach    = Color(0x4D3A2C20),
     atmosphereViolet   = Color(0x4D2E2552),
+    vgaGold            = Color(0xFFFBBF24),   // Amber-400 — 8.1:1 on ember dark, WCAG AA
 )
 
 val LocalVigiaColors = staticCompositionLocalOf { VigiaExtendedLight }

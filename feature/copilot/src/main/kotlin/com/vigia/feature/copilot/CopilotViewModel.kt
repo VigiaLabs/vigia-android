@@ -15,7 +15,6 @@ import com.vigia.core.model.VigiaSearchContext
 import com.vigia.core.network.mqtt.MqttAlertRepository
 import com.vigia.core.network.search.SearchEvent
 import com.vigia.core.network.search.VigiaSearchClient
-import com.vigia.core.network.stripe.PayoutStatus
 import com.vigia.core.sensor.cdm.CdmPresenceRepository
 import com.vigia.core.sensor.context.ContextAggregator
 import com.vigia.core.sensor.tts.TtsManager
@@ -76,7 +75,41 @@ class CopilotViewModel @Inject constructor(
             velocityMs       = 0f,
             locationSnapshot = null,
             pendingAlerts    = emptyList(),
-            payoutStatus     = PayoutStatus.Idle,
+            walletUiState    = WalletUiState(
+                publicKey      = "7PTUbMJMWRwAixmkez2yBpsjovyAECtcXQHVYzAi8jf1",
+                balanceVga     = 7241.500000,
+                pendingRewards = listOf(
+                    PendingReward(
+                        detectionId = "det-001",
+                        amountVga   = 2.0,
+                        label       = "Medium hazard · confirming…",
+                        timestampMs = System.currentTimeMillis() - 8_000L,
+                    ),
+                ),
+                recentActivity = listOf(
+                    WalletActivity(
+                        txSignature = "4xHrK9mWz3Qp8NvLdY2sJfRtBcXeA7uMnG5oZiT1wPkCq6hVbE0yS",
+                        type        = WalletActivity.Type.MINT,
+                        amountVga   = 8.0,
+                        label       = "Critical detection · first in area bonus",
+                        timestampMs = System.currentTimeMillis() - 7_200_000L,
+                    ),
+                    WalletActivity(
+                        txSignature = "9mKpL2WzN5vR8cXdQ4sTbJeYf6uAoGi3nHjMk1wPzCq7hBvE0yS",
+                        type        = WalletActivity.Type.BURN,
+                        amountVga   = 1.0,
+                        label       = "AI Co-pilot session",
+                        timestampMs = System.currentTimeMillis() - 86_400_000L,
+                    ),
+                    WalletActivity(
+                        txSignature = "3rTsU7WxM4nO9bYcP6vQkZeAd2fLgJi5mNhKj8wRzDp1hCvF0yT",
+                        type        = WalletActivity.Type.MINT,
+                        amountVga   = 1.5,
+                        label       = "Medium hazard · ×1.5 streak bonus",
+                        timestampMs = System.currentTimeMillis() - 172_800_000L,
+                    ),
+                ),
+            ),
         )
 
         observeSensorContext()

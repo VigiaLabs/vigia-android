@@ -5,7 +5,6 @@ import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.LocationSnapshot
 import com.vigia.core.model.RriScore
 import com.vigia.core.network.search.SearchEvent
-import com.vigia.core.network.stripe.PayoutStatus
 
 sealed interface CopilotUiState {
     data object Loading : CopilotUiState
@@ -17,7 +16,7 @@ sealed interface CopilotUiState {
         val velocityMs: Float,
         val locationSnapshot: LocationSnapshot?,
         val pendingAlerts: List<HazardAlert>,
-        val payoutStatus: PayoutStatus,
+        val walletUiState: WalletUiState = WalletUiState(),
         // VIGIASearch streaming state
         val searchStep: String = "",
         val completedSteps: List<String> = emptyList(),
@@ -32,3 +31,30 @@ sealed interface CopilotUiState {
 }
 
 enum class OrbState { Idle, Active, Alert, Offline, Searching }
+
+// ── Wallet UI state ───────────────────────────────────────────────────────────
+
+data class WalletUiState(
+    val publicKey: String = "",
+    val balanceVga: Double = 0.0,
+    val pendingRewards: List<PendingReward> = emptyList(),
+    val recentActivity: List<WalletActivity> = emptyList(),
+    val isSyncing: Boolean = false,
+)
+
+data class PendingReward(
+    val detectionId: String,
+    val amountVga: Double,
+    val label: String,
+    val timestampMs: Long,
+)
+
+data class WalletActivity(
+    val txSignature: String,
+    val type: Type,
+    val amountVga: Double,
+    val label: String,
+    val timestampMs: Long,
+) {
+    enum class Type { MINT, BURN }
+}
