@@ -32,4 +32,11 @@ interface AuthRepository {
     suspend fun signInWithGoogle(activity: Activity): AuthOutcome
 
     suspend fun signOut()
+
+    /**
+     * Returns the current Cognito ID token for attaching to Vigia API requests.
+     * Returns null in demo mode or when the user is not signed in.
+     * Amplify caches tokens internally so this is fast on the happy path.
+     */
+    suspend fun getIdToken(): String?
 }

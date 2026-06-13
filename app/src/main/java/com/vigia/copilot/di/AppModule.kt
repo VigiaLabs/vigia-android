@@ -1,11 +1,14 @@
 package com.vigia.copilot.di
 
 import com.vigia.copilot.BuildConfig
+import com.vigia.core.auth.AuthRepository
+import com.vigia.core.network.auth.ApiTokenProvider
 import com.vigia.core.sensor.BlackboxConfig
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.runBlocking
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -58,4 +61,23 @@ object AppModule {
     @Singleton
     @Named("SarvamApiKey")
     fun provideSarvamApiKey(): String = BuildConfig.SARVAM_API_KEY
+
+    /**
+     * Bridges [AuthRepository.getIdToken] (suspend) into the synchronous
+     * [ApiTokenProvider] interface required by OkHttp interceptors.
+     *
+     * [runBlocking] is safe here — OkHttp always calls interceptors on a
+     * background IO thread, never on the main thread. Amplify's
+     * fetchAuthSession returns from its own cached token store in <5ms
+     * on the happy path, so there is no meaningful blocking.
+     *
+     * In demo mode [AuthRepository.getIdToken] returns null immediately,
+     * so no actual network call is made.
+     */
+    @Provides
+    @Singleton
+    fun provideApiTokenProvider(authRepository: AuthRepository): ApiTokenProvider =
+        object : ApiTokenProvider {
+            override fun getIdToken(): String? = runBlocking { authRepository.getIdToken() }
+        }
 }

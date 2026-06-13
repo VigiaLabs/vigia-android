@@ -91,6 +91,10 @@ class DemoAuthRepository @Inject constructor(
         _authState.value = AuthState.SignedOut
     }
 
+    // Demo mode has no real Cognito session — API calls to protected routes
+    // will 403, which is expected until a Cognito pool is provisioned.
+    override suspend fun getIdToken(): String? = null
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private suspend fun persistSession(email: String, name: String) {

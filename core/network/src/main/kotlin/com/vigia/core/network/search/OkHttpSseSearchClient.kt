@@ -20,6 +20,8 @@ import javax.inject.Singleton
 
 /**
  * Streams VIGIASearch responses from the Fargate endpoint over SSE.
+ * Uses the auth-intercepted [OkHttpClient] so every search request carries
+ * the Cognito ID token required by the API Gateway Cognito authorizer.
  *
  * SSE wire format at POST /v1/search (Content-Type: text/event-stream):
  *   event: step     → {"step":"...", "ts":1234}
@@ -32,7 +34,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class OkHttpSseSearchClient @Inject constructor(
-    private val okHttpClient: OkHttpClient,
+    @Named("VigiaOkHttpClient") private val okHttpClient: OkHttpClient,
     @Named("VigiaApiBaseUrl") private val baseUrl: String,
 ) : VigiaSearchClient {
 

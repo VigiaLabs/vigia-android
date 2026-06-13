@@ -30,7 +30,7 @@ abstract class MapsModule {
         private const val INGESTION_BASE_URL  = "https://eepqy4yku7.execute-api.us-east-1.amazonaws.com/prod/"
 
         @Provides @Singleton @Named("SessionApi")
-        fun provideSessionRetrofit(client: OkHttpClient): Retrofit =
+        fun provideSessionRetrofit(@Named("VigiaOkHttpClient") client: OkHttpClient): Retrofit =
             Retrofit.Builder()
                 .baseUrl(SESSION_BASE_URL)
                 .client(client)
@@ -38,7 +38,7 @@ abstract class MapsModule {
                 .build()
 
         @Provides @Singleton @Named("InnovationApi")
-        fun provideInnovationRetrofit(client: OkHttpClient): Retrofit =
+        fun provideInnovationRetrofit(@Named("VigiaOkHttpClient") client: OkHttpClient): Retrofit =
             Retrofit.Builder()
                 .baseUrl(INNOVATION_BASE_URL)
                 .client(client)

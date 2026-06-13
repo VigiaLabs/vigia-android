@@ -1,6 +1,8 @@
 package com.vigia.core.network.di
 
 import com.vigia.core.network.BuildConfig
+import com.vigia.core.network.auth.ApiTokenProvider
+import com.vigia.core.network.auth.VigiaAuthInterceptor
 import com.vigia.core.network.mqtt.MqttAlertRepository
 import com.vigia.core.network.mqtt.MqttAlertRepositoryImpl
 import com.vigia.core.network.sarvam.SarvamSttClient
@@ -19,6 +21,7 @@ import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -55,6 +58,10 @@ abstract class NetworkModule {
          * callTimeout is intentionally 0 (no global cap) — individual call sites
          * cancel via coroutine scope instead.
          */
+        /**
+         * Plain OkHttpClient — no auth header. Used by Sarvam STT/TTS only.
+         * Sarvam uses its own API-Subscription-Key header, not Cognito JWT.
+         */
         @Provides
         @Singleton
         fun provideOkHttpClient(): OkHttpClient {
@@ -68,6 +75,36 @@ abstract class NetworkModule {
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .callTimeout(0, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
+                .addInterceptor(logging)
+                .build()
+        }
+
+        /**
+         * Auth-intercepted OkHttpClient for all Vigia backend API calls
+         * (Maps, Search, FCM device registration).
+         *
+         * [VigiaAuthInterceptor] adds "Authorization: Bearer <cognito_id_token>" when
+         * the user is signed in to Cognito. In demo mode [ApiTokenProvider.getIdToken]
+         * returns null and the header is omitted — requests to public routes still work
+         * and protected routes fail fast with 403 instead of silently.
+         */
+        @Provides
+        @Singleton
+        @Named("VigiaOkHttpClient")
+        fun provideVigiaOkHttpClient(
+            authInterceptor: VigiaAuthInterceptor,
+        ): OkHttpClient {
+            val logging = HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                        else HttpLoggingInterceptor.Level.NONE
+            }
+            return OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(0, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .addInterceptor(authInterceptor)  // auth before logging so token appears in debug logs
                 .addInterceptor(logging)
                 .build()
         }

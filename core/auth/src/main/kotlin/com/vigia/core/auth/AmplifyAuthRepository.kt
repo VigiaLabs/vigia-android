@@ -5,6 +5,7 @@ import com.amplifyframework.auth.AuthProvider
 import com.amplifyframework.auth.AuthUserAttribute
 import com.amplifyframework.auth.AuthUserAttributeKey
 import com.amplifyframework.auth.AuthException
+import com.amplifyframework.auth.cognito.AWSCognitoAuthSession
 import com.amplifyframework.auth.options.AuthSignUpOptions
 import com.amplifyframework.auth.result.AuthSignInResult
 import com.amplifyframework.auth.result.AuthSignUpResult
@@ -102,6 +103,13 @@ class AmplifyAuthRepository @Inject constructor() : AuthRepository {
         }
         _authState.value = AuthState.SignedOut
     }
+
+    override suspend fun getIdToken(): String? = runCatching {
+        val session = awaitAmplify<com.amplifyframework.auth.AuthSession> { ok, err ->
+            Amplify.Auth.fetchAuthSession(ok, err)
+        }
+        (session as? AWSCognitoAuthSession)?.userPoolTokensResult?.value?.idToken
+    }.getOrNull()
 
     // ── helpers ───────────────────────────────────────────────────────────────
 

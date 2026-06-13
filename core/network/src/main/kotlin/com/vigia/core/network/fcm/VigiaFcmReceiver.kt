@@ -43,7 +43,7 @@ import javax.inject.Named
 class VigiaFcmReceiver : FirebaseMessagingService() {
 
     @Inject lateinit var mqttAlertRepository: MqttAlertRepository
-    @Inject lateinit var okHttpClient: OkHttpClient
+    @Inject @Named("VigiaOkHttpClient") lateinit var okHttpClient: OkHttpClient
     @Inject @Named("VigiaApiBaseUrl") lateinit var baseUrl: String
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
