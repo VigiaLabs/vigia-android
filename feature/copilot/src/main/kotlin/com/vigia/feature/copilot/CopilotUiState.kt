@@ -46,6 +46,7 @@ enum class OrbState {
 enum class VoiceListeningState {
     Idle,        // overlay not active
     Listening,   // mic open, recording
+    Paused,      // mic muted by user — overlay stays open
     Processing,  // STT + search in flight
     Speaking,    // Sarvam TTS playing back the answer
 }

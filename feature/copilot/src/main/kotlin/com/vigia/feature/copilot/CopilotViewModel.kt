@@ -235,6 +235,7 @@ class CopilotViewModel @Inject constructor(
     fun startVoiceMode() {
         val current = _uiState.value as? CopilotUiState.Active ?: return
         // Don't restart recording if already Listening or Processing.
+        // Paused is allowed — resumeVoiceMode routes through here.
         if (current.voiceListeningState == VoiceListeningState.Listening ||
             current.voiceListeningState == VoiceListeningState.Processing) return
 
@@ -312,6 +313,29 @@ class CopilotViewModel @Inject constructor(
                 orbState              = OrbState.Active,
             )
         }
+    }
+
+    /** Mutes the mic and pauses TTS — overlay stays open, session is preserved. */
+    fun holdVoiceMode() {
+        val current = _uiState.value as? CopilotUiState.Active ?: return
+        if (current.voiceListeningState != VoiceListeningState.Listening &&
+            current.voiceListeningState != VoiceListeningState.Speaking) return
+        voiceAmplitudeMonitor.stopSilently()
+        ttsManager.stop()
+        updateActive {
+            copy(
+                voiceListeningState = VoiceListeningState.Paused,
+                voiceAmplitude      = 0f,
+            )
+        }
+    }
+
+    /** Resumes recording after a hold — re-opens the mic for the next user turn. */
+    fun resumeVoiceMode() {
+        val current = _uiState.value as? CopilotUiState.Active ?: return
+        if (current.voiceListeningState != VoiceListeningState.Paused) return
+        updateActive { copy(voiceListeningState = VoiceListeningState.Idle) }
+        startVoiceMode()
     }
 
     // ── Private observers ─────────────────────────────────────────────────────

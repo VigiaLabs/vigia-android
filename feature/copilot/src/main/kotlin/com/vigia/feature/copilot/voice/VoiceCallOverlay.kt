@@ -26,8 +26,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -88,13 +93,16 @@ internal fun VoiceCallOverlay(
     voiceAmplitude: Float,
     listeningState: VoiceListeningState,
     onSend: () -> Unit,      // tap orb while Listening → stop recording + transcribe
+    onHold: () -> Unit,      // mute mic, keep overlay open
+    onResume: () -> Unit,    // unmute mic after hold
     onEnd: () -> Unit,       // tap X → dismiss entire voice session
     modifier: Modifier = Modifier,
 ) {
     val targetActivity = when (listeningState) {
         VoiceListeningState.Listening  -> 0.38f + voiceAmplitude * 0.62f
         VoiceListeningState.Processing -> 0.52f
-        VoiceListeningState.Speaking   -> 0.42f + voiceAmplitude * 0.58f   // real TTS amplitude
+        VoiceListeningState.Speaking   -> 0.42f + voiceAmplitude * 0.58f
+        VoiceListeningState.Paused     -> 0.18f
         VoiceListeningState.Idle       -> 0.28f
     }
     val activity = animateFloatAsState(
@@ -138,6 +146,7 @@ internal fun VoiceCallOverlay(
                         VoiceListeningState.Listening  -> "Listening…"
                         VoiceListeningState.Processing -> "Processing…"
                         VoiceListeningState.Speaking   -> "Speaking…"
+                        VoiceListeningState.Paused     -> "On hold"
                         VoiceListeningState.Idle       -> ""
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -168,6 +177,7 @@ internal fun VoiceCallOverlay(
                         VoiceListeningState.Listening  -> "Tap to send"
                         VoiceListeningState.Processing -> "Thinking…"
                         VoiceListeningState.Speaking   -> "Tap X to end"
+                        VoiceListeningState.Paused     -> "Tap mic to resume"
                         VoiceListeningState.Idle       -> ""
                     },
                     style     = MaterialTheme.typography.labelMedium,
@@ -178,28 +188,69 @@ internal fun VoiceCallOverlay(
 
             Spacer(Modifier.weight(1f))
 
-            // ── Single end-call button ─────────────────────────────────────────
-            val endInteraction = remember { MutableInteractionSource() }
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(64.dp)
-                    .pressScale(endInteraction, pressedScale = 0.88f)
-                    .clip(CircleShape)
-                    .background(Color(0xFFFF5C3A))
-                    .clickable(
-                        interactionSource = endInteraction,
-                        indication        = null,
-                        onClick           = onEnd,
-                    )
-                    .semantics { contentDescription = "End voice session" },
+            // ── Hold + End row ─────────────────────────────────────────────────
+            val isPaused = listeningState == VoiceListeningState.Paused
+            val canHold  = listeningState == VoiceListeningState.Listening ||
+                           listeningState == VoiceListeningState.Speaking
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
+                verticalAlignment     = Alignment.CenterVertically,
+                modifier              = Modifier.width(200.dp),
             ) {
-                Icon(
-                    imageVector        = Icons.Filled.Close,
-                    contentDescription = null,
-                    tint               = Color.White,
-                    modifier           = Modifier.size(26.dp),
-                )
+                // Hold / Resume button
+                val holdInteraction = remember { MutableInteractionSource() }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .pressScale(holdInteraction, pressedScale = 0.88f)
+                        .clip(CircleShape)
+                        .background(
+                            if (isPaused) Color(0xFF4CAF50)
+                            else Color.White.copy(alpha = 0.15f)
+                        )
+                        .clickable(
+                            interactionSource = holdInteraction,
+                            indication        = null,
+                            enabled           = canHold || isPaused,
+                            onClick           = if (isPaused) onResume else onHold,
+                        )
+                        .semantics {
+                            contentDescription = if (isPaused) "Resume mic" else "Hold mic"
+                        },
+                ) {
+                    Icon(
+                        imageVector        = if (isPaused) Icons.Filled.Mic else Icons.Filled.MicOff,
+                        contentDescription = null,
+                        tint               = Color.White,
+                        modifier           = Modifier.size(22.dp),
+                    )
+                }
+
+                // End button
+                val endInteraction = remember { MutableInteractionSource() }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .pressScale(endInteraction, pressedScale = 0.88f)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF5C3A))
+                        .clickable(
+                            interactionSource = endInteraction,
+                            indication        = null,
+                            onClick           = onEnd,
+                        )
+                        .semantics { contentDescription = "End voice session" },
+                ) {
+                    Icon(
+                        imageVector        = Icons.Filled.Close,
+                        contentDescription = null,
+                        tint               = Color.White,
+                        modifier           = Modifier.size(26.dp),
+                    )
+                }
             }
 
             Spacer(Modifier.height(32.dp))
@@ -286,9 +337,10 @@ private fun OrbSendButton(
                     val simulated = 0.55f * a + 0.45f * b
                     val amp = when (listeningState) {
                         VoiceListeningState.Listening,
-                        VoiceListeningState.Speaking  ->
+                        VoiceListeningState.Speaking ->
                             voiceAmplitude * 0.72f + simulated * (1f - voiceAmplitude) * 0.28f
-                        else -> simulated * 0.20f   // minimal motion
+                        VoiceListeningState.Paused   -> simulated * 0.10f
+                        else                         -> simulated * 0.20f
                     }
                     val s = 1f + amp * 0.24f
                     scaleX = s; scaleY = s
@@ -298,6 +350,7 @@ private fun OrbSendButton(
                 VoiceListeningState.Listening  -> OrbState.Listening
                 VoiceListeningState.Processing -> OrbState.Searching
                 VoiceListeningState.Speaking   -> OrbState.Active
+                VoiceListeningState.Paused,
                 VoiceListeningState.Idle       -> OrbState.Idle
             }
             AiOrb(state = orbState, size = size)

@@ -4,6 +4,13 @@ import android.Manifest
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -80,11 +87,19 @@ fun CopilotRoute(
         )
 
         val active = uiState as? CopilotUiState.Active
-        if (active?.isVoiceOverlayVisible == true) {
+        AnimatedVisibility(
+            visible = active?.isVoiceOverlayVisible == true,
+            enter   = fadeIn(tween(320)) +
+                      scaleIn(tween(380, easing = FastOutSlowInEasing), initialScale = 0.93f),
+            exit    = fadeOut(tween(220)) +
+                      scaleOut(tween(260, easing = FastOutSlowInEasing), targetScale = 0.95f),
+        ) {
             VoiceCallOverlay(
-                voiceAmplitude = active.voiceAmplitude,
-                listeningState = active.voiceListeningState,
+                voiceAmplitude = active?.voiceAmplitude ?: 0f,
+                listeningState = active?.voiceListeningState ?: VoiceListeningState.Idle,
                 onSend         = viewModel::endVoiceRecording,
+                onHold         = viewModel::holdVoiceMode,
+                onResume       = viewModel::resumeVoiceMode,
                 onEnd          = viewModel::dismissVoiceOverlay,
                 modifier       = Modifier.fillMaxSize(),
             )
