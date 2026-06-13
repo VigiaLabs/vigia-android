@@ -174,9 +174,9 @@ internal fun VoiceCallOverlay(
             ) { state ->
                 Text(
                     text      = when (state) {
-                        VoiceListeningState.Listening  -> "Tap to send"
+                        VoiceListeningState.Listening  -> "Listening…"
                         VoiceListeningState.Processing -> "Thinking…"
-                        VoiceListeningState.Speaking   -> "Tap X to end"
+                        VoiceListeningState.Speaking   -> "Press × to stop"
                         VoiceListeningState.Paused     -> "Tap mic to resume"
                         VoiceListeningState.Idle       -> ""
                     },
@@ -203,7 +203,7 @@ internal fun VoiceCallOverlay(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(64.dp)
                         .pressScale(holdInteraction, pressedScale = 0.88f)
                         .clip(CircleShape)
                         .background(
