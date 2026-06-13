@@ -135,6 +135,9 @@ class CopilotViewModel @Inject constructor(
         val baseContext = _latestContext.value
         if (baseContext == null) {
             Log.w(TAG, "sendMessage('${text.take(20)}') DROPPED — _latestContext is null (sensor context not ready)")
+            // If in a voice session, reopen the mic so the overlay doesn't get stuck.
+            val active = _uiState.value as? CopilotUiState.Active
+            if (active?.isVoiceOverlayVisible == true) reopenMic()
             return
         }
 
@@ -253,6 +256,8 @@ class CopilotViewModel @Inject constructor(
     /**
      * Stops recording, transcribes via Sarvam STT, then runs the search pipeline.
      * The aurora mist stays visible and transitions to Processing state while STT runs.
+     * On blank transcript or STT error the mic reopens for another attempt instead of
+     * closing the overlay — the user stays in the conversational session.
      */
     fun endVoiceRecording() {
         val current = _uiState.value as? CopilotUiState.Active ?: return
@@ -268,16 +273,30 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
-                if (transcript.isNotBlank()) {
+                if (transcript.isNotBlank() && _latestContext.value != null) {
                     sendMessage(transcript)  // triggers search → Sarvam TTS on Done
                 } else {
-                    dismissVoiceOverlay()
+                    // Blank transcript or sensor context not ready — reopen mic.
+                    Log.w(TAG, "Voice: blank transcript or no context, reopening mic")
+                    reopenMic()
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "STT error: ${e.message}")
-                dismissVoiceOverlay()
+                Log.e(TAG, "STT error — reopening mic", e)
+                reopenMic()
             }
         }
+    }
+
+    /**
+     * Resets voice state to Idle then immediately reopens the mic so the user
+     * can speak again without leaving the voice session.
+     * Called on blank STT result or network errors so the overlay never closes
+     * unexpectedly mid-conversation.
+     */
+    private fun reopenMic() {
+        // Reset to Idle first so startVoiceMode's guard passes.
+        updateActive { copy(voiceListeningState = VoiceListeningState.Idle) }
+        startVoiceMode()
     }
 
     /** Cancels recording and hides the overlay without sending a message. */
