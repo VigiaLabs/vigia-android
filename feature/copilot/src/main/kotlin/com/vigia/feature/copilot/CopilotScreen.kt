@@ -2195,7 +2195,7 @@ private fun BalanceHeroCard(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text     = "\$VGA",
+                            text     = "\$VIGIA",
                             style    = MaterialTheme.typography.labelLarge,
                             color    = vgaGold,
                             modifier = Modifier.padding(bottom = 3.dp),
@@ -2374,7 +2374,7 @@ private fun PendingRewardRow(reward: PendingReward, modifier: Modifier = Modifie
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text  = "+${"%.3f".format(reward.amountVga)} VGA",
+                    text  = "+${"%.3f".format(reward.amountVga)} VIGIA",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = vgaGold,
                 )
@@ -2419,7 +2419,7 @@ private fun ActivityFeedItem(tx: WalletActivity, modifier: Modifier = Modifier) 
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text  = "$sign${"%.3f".format(tx.amountVga)} VGA",
+                    text  = "$sign${"%.3f".format(tx.amountVga)} VIGIA",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = tint,
                 )

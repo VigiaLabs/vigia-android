@@ -54,9 +54,15 @@ class VigiaFcmReceiver : FirebaseMessagingService() {
 
         // If the payload contains a full alert, inject it without waiting for MQTT.
         val data = message.data
-        if (data["type"] == "alert") {
-            buildAlert(data)?.let { alert ->
+        when (data["type"]) {
+            "alert" -> buildAlert(data)?.let { alert ->
                 scope.launch { mqttAlertRepository.injectAlert(alert) }
+            }
+            "reward" -> {
+                // A $VIGIA reward has been minted to the user's ATA.
+                // The wallet ViewModel polls on next resume. Full push-triggered
+                // balance refresh is wired in Phase 6 via WorkManager.
+                Log.d(TAG, "Reward: hazard=${data["hazard_id"]} amount=${data["amount_vigia"]} \$VIGIA")
             }
         }
     }

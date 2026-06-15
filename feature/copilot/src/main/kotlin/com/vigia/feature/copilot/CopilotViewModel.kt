@@ -20,9 +20,11 @@ import com.vigia.core.sensor.cdm.CdmPresenceRepository
 import com.vigia.core.sensor.context.ContextAggregator
 import com.vigia.core.sensor.tts.TtsManager
 import com.vigia.core.sensor.voice.VoiceAmplitudeMonitor
+import com.vigia.core.wallet.WalletRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -46,9 +48,13 @@ class CopilotViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val sarvamSttClient: SarvamSttClient,
     private val voiceAmplitudeMonitor: VoiceAmplitudeMonitor,
+    private val walletRepository: WalletRepository,
 ) : ViewModel() {
 
-    private companion object { const val TAG = "VigiaCopilot" }
+    private companion object {
+        const val TAG = "VigiaCopilot"
+        const val WALLET_POLL_INTERVAL_MS = 60_000L
+    }
 
     private val _uiState = MutableStateFlow<CopilotUiState>(CopilotUiState.Loading)
     val uiState: StateFlow<CopilotUiState> = _uiState.asStateFlow()
@@ -79,46 +85,14 @@ class CopilotViewModel @Inject constructor(
             velocityMs       = 0f,
             locationSnapshot = null,
             pendingAlerts    = emptyList(),
-            walletUiState    = WalletUiState(
-                publicKey      = "7PTUbMJMWRwAixmkez2yBpsjovyAECtcXQHVYzAi8jf1",
-                balanceVga     = 7241.500000,
-                pendingRewards = listOf(
-                    PendingReward(
-                        detectionId = "det-001",
-                        amountVga   = 2.0,
-                        label       = "Medium hazard · confirming…",
-                        timestampMs = System.currentTimeMillis() - 8_000L,
-                    ),
-                ),
-                recentActivity = listOf(
-                    WalletActivity(
-                        txSignature = "4xHrK9mWz3Qp8NvLdY2sJfRtBcXeA7uMnG5oZiT1wPkCq6hVbE0yS",
-                        type        = WalletActivity.Type.MINT,
-                        amountVga   = 8.0,
-                        label       = "Critical detection · first in area bonus",
-                        timestampMs = System.currentTimeMillis() - 7_200_000L,
-                    ),
-                    WalletActivity(
-                        txSignature = "9mKpL2WzN5vR8cXdQ4sTbJeYf6uAoGi3nHjMk1wPzCq7hBvE0yS",
-                        type        = WalletActivity.Type.BURN,
-                        amountVga   = 1.0,
-                        label       = "AI Co-pilot session",
-                        timestampMs = System.currentTimeMillis() - 86_400_000L,
-                    ),
-                    WalletActivity(
-                        txSignature = "3rTsU7WxM4nO9bYcP6vQkZeAd2fLgJi5mNhKj8wRzDp1hCvF0yT",
-                        type        = WalletActivity.Type.MINT,
-                        amountVga   = 1.5,
-                        label       = "Medium hazard · ×1.5 streak bonus",
-                        timestampMs = System.currentTimeMillis() - 172_800_000L,
-                    ),
-                ),
-            ),
+            walletUiState    = WalletUiState(isSyncing = true),
         )
 
         observeSensorContext()
         observeAlerts()
         observeTtsAmplitude()
+        observeWalletState()
+        startWalletPolling()
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -379,6 +353,33 @@ class CopilotViewModel @Inject constructor(
                 if (alert.severity >= HazardAlert.Severity.HIGH) {
                     updateActive { copy(orbState = OrbState.Alert) }
                 }
+            }
+        }
+    }
+
+    // ── Wallet ────────────────────────────────────────────────────────────────
+
+    private fun observeWalletState() {
+        viewModelScope.launch {
+            walletRepository.state.collect { ws ->
+                updateActive {
+                    copy(
+                        walletUiState = walletUiState.copy(
+                            publicKey  = ws.publicKey,
+                            balanceVga = ws.pendingBalanceVigia,
+                            isSyncing  = ws.isSyncing,
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startWalletPolling() {
+        viewModelScope.launch {
+            while (true) {
+                walletRepository.refreshBalance()
+                delay(WALLET_POLL_INTERVAL_MS)
             }
         }
     }

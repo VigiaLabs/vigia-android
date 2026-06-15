@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.vigia.core.wallet.Base58Test" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-06-15T15:12:46.108Z" hostname="Mac" time="0.006">
+  <properties/>
+  <testcase name="leading zero bytes produce leading 1s" classname="com.vigia.core.wallet.Base58Test" time="0.003"/>
+  <testcase name="32 bytes all zeros encodes to 32 ones" classname="com.vigia.core.wallet.Base58Test" time="0.0"/>
+  <testcase name="encodes empty array to empty string" classname="com.vigia.core.wallet.Base58Test" time="0.0"/>
+  <testcase name="encodes known 32-byte value deterministically" classname="com.vigia.core.wallet.Base58Test" time="0.0"/>
+  <testcase name="encodes single zero byte to 1" classname="com.vigia.core.wallet.Base58Test" time="0.0"/>
+  <testcase name="telemetry payload string encodes without exception" classname="com.vigia.core.wallet.Base58Test" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

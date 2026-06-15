@@ -12,6 +12,7 @@ dependencies {
     // Feature modules access core layers only through interfaces
     implementation(project(":core:network"))
     implementation(project(":core:sensor"))
+    implementation(project(":core:wallet"))
     implementation(project(":core:data"))
     implementation(project(":core:auth"))
 

@@ -26,6 +26,7 @@ android {
 
 dependencies {
     implementation(project(":feature:copilot"))
+    implementation(project(":core:wallet"))
     implementation(project(":feature:maps"))
     implementation(libs.osmdroid.android)
     implementation(project(":core:sensor"))

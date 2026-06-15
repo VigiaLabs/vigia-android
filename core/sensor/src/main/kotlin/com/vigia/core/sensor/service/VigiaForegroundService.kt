@@ -14,6 +14,7 @@ import com.vigia.core.model.DevicePresenceState
 import com.vigia.core.sensor.BlackboxConfig
 import com.vigia.core.sensor.ble.BleRepository
 import com.vigia.core.sensor.cdm.CdmPresenceRepository
+import com.vigia.core.wallet.WalletRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,10 @@ class VigiaForegroundService : Service() {
     @Inject lateinit var cdmRepository: CdmPresenceRepository
     @Inject lateinit var bleRepository: BleRepository
     @Inject lateinit var blackboxConfig: BlackboxConfig
+    @Inject lateinit var walletRepository: WalletRepository
+
+    // Prevent repeated provisioning across presence flaps in a single service lifetime.
+    @Volatile private var walletProvisioned = false
 
     // Service-scoped coroutine scope; cancelled in onDestroy.
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -97,7 +102,13 @@ class VigiaForegroundService : Service() {
         serviceScope.launch {
             cdmRepository.presenceState.collectLatest { presence ->
                 when (presence) {
-                    DevicePresenceState.Present -> connectWithRetry()
+                    DevicePresenceState.Present -> {
+                        if (!walletProvisioned) {
+                            walletProvisioned = true
+                            serviceScope.launch { walletRepository.ensureProvisioned() }
+                        }
+                        connectWithRetry()
+                    }
                     DevicePresenceState.Absent,
                     DevicePresenceState.Unknown -> {
                         bleRepository.disconnect()
