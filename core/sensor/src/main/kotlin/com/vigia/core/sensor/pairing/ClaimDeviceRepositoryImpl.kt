@@ -27,7 +27,7 @@ class ClaimDeviceRepositoryImpl @Inject constructor(
                     .toRequestBody("application/json".toMediaType())
 
                 val request = Request.Builder()
-                    .url("$baseUrl/v1/claim-device")
+                    .url("$baseUrl/claim-device")
                     .post(body)
                     .build()
 
