@@ -16,21 +16,23 @@ import com.vigia.feature.copilot.auth.AuthScreen
 import com.vigia.feature.copilot.auth.AuthViewModel
 import com.vigia.feature.copilot.orb.AiOrb
 import com.vigia.feature.copilot.theme.VigiaTheme
+import com.vigia.feature.pairing.PairingScreen
 
 /**
- * App entry gate. Routes on the auth session:
- *   Loading  → branded splash while the cached session is restored
+ * App entry gate. Routes on auth state then pairing state:
+ *   Loading   → branded splash
  *   SignedOut → [AuthScreen]
- *   SignedIn  → [CopilotRoute] (with sign-out + account wired into the drawer)
- *
- * Hardware/AI features live entirely behind this gate — an unauthenticated user
- * never reaches the copilot.
+ *   SignedIn + not paired → [PairingScreen] (one-time QR scan, design spec §5)
+ *   SignedIn + paired     → [CopilotRoute]
  */
 @Composable
 fun AppRoot() {
     val authViewModel: AuthViewModel = hiltViewModel()
     val authState by authViewModel.authState.collectAsStateWithLifecycle()
-    val ui by authViewModel.ui.collectAsStateWithLifecycle()
+    val ui        by authViewModel.ui.collectAsStateWithLifecycle()
+
+    val appRootViewModel: AppRootViewModel = hiltViewModel()
+    val isPaired by appRootViewModel.isPaired.collectAsStateWithLifecycle()
 
     when (val state = authState) {
         AuthState.Loading -> SplashGate()
@@ -49,11 +51,19 @@ fun AppRoot() {
             onGoogle   = authViewModel::signInWithGoogle,
         )
 
-        is AuthState.SignedIn -> CopilotRoute(
-            onSignOut    = authViewModel::signOut,
-            accountName  = state.user.displayName,
-            accountEmail = state.user.email,
-        )
+        is AuthState.SignedIn -> {
+            when {
+                isPaired == null -> SplashGate()  // Still loading pairing state from DataStore.
+                isPaired == false -> PairingScreen(
+                    onPairingComplete = appRootViewModel::onPairingComplete,
+                )
+                else -> CopilotRoute(
+                    onSignOut    = authViewModel::signOut,
+                    accountName  = state.user.displayName,
+                    accountEmail = state.user.email,
+                )
+            }
+        }
     }
 }
 

@@ -3,6 +3,8 @@ package com.vigia.feature.maps.components
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -29,7 +31,12 @@ fun VigiaMapView(
     userLocation: LocationSnapshot?,
     modifier: Modifier = Modifier,
 ) {
-    val mapView = remember { null as MapView? }   // created inside AndroidView factory
+    // Track the last camera target applied to the MapView. The update lambda runs on
+    // every recomposition (e.g. each 1 s GPS tick mutates userLocation), but the OSM
+    // camera should only re-animate when the center/zoom genuinely change — otherwise
+    // back-to-back animateTo() calls compete and stutter the map.
+    val lastCenter = remember { mutableStateOf<LatLng?>(null) }
+    val lastZoom   = remember { mutableDoubleStateOf(Double.NaN) }
 
     AndroidView(
         factory = { context ->
@@ -52,8 +59,14 @@ fun VigiaMapView(
             }
         },
         update = { view ->
-            view.controller.animateTo(GeoPoint(center.lat, center.lng))
-            view.controller.setZoom(zoom)
+            if (center != lastCenter.value) {
+                view.controller.animateTo(GeoPoint(center.lat, center.lng))
+                lastCenter.value = center
+            }
+            if (zoom != lastZoom.doubleValue) {
+                view.controller.setZoom(zoom)
+                lastZoom.doubleValue = zoom
+            }
         },
         onRelease = { view -> view.onDetach() },
         modifier = modifier,

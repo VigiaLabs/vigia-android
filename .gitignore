@@ -16,3 +16,6 @@ build/
 .cxx
 local.properties
 secrets.properties
+# Kotlin compiler error logs and stray local downloads
+.kotlin/
+*.deb

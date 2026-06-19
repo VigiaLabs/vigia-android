@@ -16,6 +16,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.datastore.prefs)
+    implementation(libs.okhttp) // pairing/claim-device HTTP repositories
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.core)

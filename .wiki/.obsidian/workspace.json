@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "618dbad2e762cead",
+        "id": "3afc92601bdec351",
         "type": "tabs",
         "children": [
           {
-            "id": "a1a6e8b4f929be37",
+            "id": "d31858eb5b0b66d5",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -176,9 +176,11 @@
       "bases:Create new base": false
     }
   },
-  "active": "a1a6e8b4f929be37",
+  "active": "d31858eb5b0b66d5",
   "lastOpenFiles": [
+    "core-model.md",
     "build-logic.md",
+    "feature-maps.md",
     "feature-copilot.md",
     "app.md"
   ]

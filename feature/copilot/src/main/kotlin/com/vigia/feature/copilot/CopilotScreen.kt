@@ -1108,33 +1108,30 @@ private fun Atmosphere(modifier: Modifier = Modifier) {
     val sky    = MaterialTheme.vigiaColors.atmosphereSky
     val peach  = MaterialTheme.vigiaColors.atmospherePeach
     val violet = MaterialTheme.vigiaColors.atmosphereViolet
+    // The three radial washes are static — build each Brush once per size/colour and
+    // reuse across draw passes (haze re-samples this layer every frame) instead of
+    // allocating fresh gradients on every draw.
     Canvas(modifier = modifier.fillMaxSize()) {
+        val skyRadius    = size.width * 0.95f
+        val peachRadius  = size.width * 0.80f
+        val violetRadius = size.width * 0.85f
+        val skyCenter    = Offset(size.width * 0.10f, size.height * 0.05f)
+        val peachCenter  = Offset(size.width * 0.95f, size.height * 0.22f)
+        val violetCenter = Offset(size.width * 0.15f, size.height * 0.92f)
         drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(sky, Color.Transparent),
-                center = Offset(size.width * 0.10f, size.height * 0.05f),
-                radius = size.width * 0.95f,
-            ),
-            center = Offset(size.width * 0.10f, size.height * 0.05f),
-            radius = size.width * 0.95f,
+            brush  = Brush.radialGradient(listOf(sky, Color.Transparent), skyCenter, skyRadius),
+            center = skyCenter,
+            radius = skyRadius,
         )
         drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(peach, Color.Transparent),
-                center = Offset(size.width * 0.95f, size.height * 0.22f),
-                radius = size.width * 0.80f,
-            ),
-            center = Offset(size.width * 0.95f, size.height * 0.22f),
-            radius = size.width * 0.80f,
+            brush  = Brush.radialGradient(listOf(peach, Color.Transparent), peachCenter, peachRadius),
+            center = peachCenter,
+            radius = peachRadius,
         )
         drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(violet, Color.Transparent),
-                center = Offset(size.width * 0.15f, size.height * 0.92f),
-                radius = size.width * 0.85f,
-            ),
-            center = Offset(size.width * 0.15f, size.height * 0.92f),
-            radius = size.width * 0.85f,
+            brush  = Brush.radialGradient(listOf(violet, Color.Transparent), violetCenter, violetRadius),
+            center = violetCenter,
+            radius = violetRadius,
         )
     }
 }
@@ -1156,7 +1153,20 @@ private fun LandingPager(
     state: CopilotUiState.Active,
     modifier: Modifier = Modifier,
 ) {
-    HorizontalPager(state = pagerState, modifier = modifier) { page ->
+    // Pre-compose the immediate neighbour so heavy pages (Maps' OSMDroid MapView,
+    // its tiles + ViewModel) are laid out BEFORE the swipe lands on them — the page
+    // is ready off the critical frame instead of composing mid-gesture (the jitter).
+    // Limited to 1 so the MapView never inflates at startup if the user never opens it.
+    // While settled on the Map page, disable pager swipe so horizontal drags pan the
+    // OSMDroid map instead of flipping to Alerts/Wallet. settledPage (not currentPage)
+    // means an in-flight swipe toward Map is never cut off mid-gesture; navigation off
+    // the map is then via the top-bar tabs (programmatic scroll is unaffected).
+    HorizontalPager(
+        state = pagerState,
+        beyondViewportPageCount = 1,
+        userScrollEnabled = LandingTab.entries[pagerState.settledPage] != LandingTab.Map,
+        modifier = modifier,
+    ) { page ->
         when (LandingTab.entries[page]) {
             LandingTab.Ask -> LandingContent(
                 state    = state,
@@ -1168,12 +1178,33 @@ private fun LandingPager(
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
             )
-            LandingTab.Map -> com.vigia.feature.maps.MapsScreen()
+            LandingTab.Map -> FramedMap(modifier = Modifier.fillMaxSize())
             LandingTab.Wallet -> WalletPane(
                 uiState  = state.walletUiState,
                 modifier = Modifier.fillMaxSize(),
             )
         }
+    }
+}
+
+/**
+ * The map inside a rounded, bordered card inset from the page edges (iOS card register),
+ * rather than full-bleed. The inset margin also gives a clear visual signal that the map
+ * is a contained surface — paired with the pager's swipe-lock on this page so panning the
+ * map never spills over into a page change.
+ */
+@Composable
+private fun FramedMap(modifier: Modifier = Modifier) {
+    val frameShape = RoundedCornerShape(28.dp)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 10.dp)
+            .padding(bottom = 10.dp)
+            .clip(frameShape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, frameShape),
+    ) {
+        com.vigia.feature.maps.MapsScreen()
     }
 }
 
@@ -1261,7 +1292,14 @@ private fun ChatContent(
     displaySources: List<SearchEvent.Source>,
     modifier: Modifier = Modifier,
 ) {
-    HorizontalPager(state = pagerState, modifier = modifier) { page ->
+    // Pre-compose the neighbour page so the Map tab is ready before the swipe lands
+    // (see LandingPager for rationale) — keeps Answers ↔ Sources ↔ Map glassy.
+    HorizontalPager(
+        state = pagerState,
+        beyondViewportPageCount = 1,
+        userScrollEnabled = ChatTab.entries[pagerState.settledPage] != ChatTab.Map,
+        modifier = modifier,
+    ) { page ->
         when (ChatTab.entries[page]) {
             ChatTab.Answers -> AnswersPane(
                 state           = state,
@@ -1272,7 +1310,7 @@ private fun ChatContent(
                 sources  = displaySources,
                 modifier = Modifier.fillMaxSize(),
             )
-            ChatTab.Map -> com.vigia.feature.maps.MapsScreen()
+            ChatTab.Map -> FramedMap(modifier = Modifier.fillMaxSize())
         }
     }
 }
@@ -2240,12 +2278,16 @@ private fun BalanceHeroCard(
                     modifier = Modifier.weight(1f),
                 )
                 if (publicKey.isNotEmpty()) {
+                    val copyInteraction = remember { MutableInteractionSource() }
                     Surface(
                         shape    = MaterialTheme.shapes.small,
                         color    = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.clickable {
-                            clipboardManager.setText(AnnotatedString(publicKey))
-                        },
+                        border   = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .pressScale(copyInteraction, pressedScale = 0.92f)
+                            .clickable(interactionSource = copyInteraction, indication = null) {
+                                clipboardManager.setText(AnnotatedString(publicKey))
+                            },
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -2302,13 +2344,16 @@ private fun WalletActionChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
+    // iOS press register: spring squish on touch (VigiaMotion.snappy), no Material ripple.
+    val interaction = remember { MutableInteractionSource() }
     Surface(
         shape    = MaterialTheme.shapes.large,
         color    = MaterialTheme.vigiaColors.glassSurface,
         border   = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier
             .defaultMinSize(minHeight = 64.dp)
-            .clickable(onClick = onClick),
+            .pressScale(interaction)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

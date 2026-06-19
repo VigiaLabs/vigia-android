@@ -9,6 +9,8 @@ activityCompose             = "1.12.2"
 lifecycle                   = "2.10.0"
 navigation                  = "2.9.0"
 datastore                   = "1.1.4"
+camerax                     = "1.4.2"
+mlkitBarcode                = "17.3.0"
 room                        = "2.7.1"
 hilt                        = "2.56.2"
 hiltNavigation              = "1.2.0"
@@ -99,6 +101,15 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 # ── DataStore ──
 androidx-datastore-prefs = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
+# ── CameraX ──
+androidx-camera-core      = { group = "androidx.camera", name = "camera-core",      version.ref = "camerax" }
+androidx-camera-camera2   = { group = "androidx.camera", name = "camera-camera2",   version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle",  version.ref = "camerax" }
+androidx-camera-view      = { group = "androidx.camera", name = "camera-view",      version.ref = "camerax" }
+
+# ── ML Kit — bundled barcode scanner (no Play Services dependency) ──
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
+
 # ── Network ──
 okhttp         = { group = "com.squareup.okhttp3",  name = "okhttp",              version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3",  name = "logging-interceptor", version.ref = "okhttp" }
@@ -144,6 +155,7 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 
 [bundles]
 compose-ui = ["androidx-compose-ui", "androidx-compose-ui-graphics", "androidx-compose-ui-tooling-preview", "androidx-compose-animation", "androidx-compose-material3"]
+camerax    = ["androidx-camera-core", "androidx-camera-camera2", "androidx-camera-lifecycle", "androidx-camera-view"]
 lifecycle  = ["androidx-lifecycle-runtime-ktx", "androidx-lifecycle-runtime-compose", "androidx-lifecycle-viewmodel-compose"]
 networking = ["okhttp", "okhttp-logging", "retrofit", "retrofit-gson"]
 

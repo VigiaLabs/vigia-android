@@ -1,15 +1,21 @@
 package com.vigia.feature.maps.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Layers
@@ -61,14 +67,25 @@ fun LayerToggleColumn(
                 tween(200), label = "layer_tint",
             )
 
+            // iOS press register: spring squish on touch, no Material ripple. Curve
+            // matches feature:copilot's VigiaMotion.snappy (damping 0.6, stiffness 700).
+            val interaction = remember { MutableInteractionSource() }
+            val pressed by interaction.collectIsPressedAsState()
+            val scale by animateFloatAsState(
+                targetValue   = if (pressed) 0.88f else 1f,
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 700f),
+                label         = "layer_press",
+            )
+
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(40.dp)
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
                     .clip(RoundedCornerShape(10.dp))
                     .background(bgColor)
                     .border(0.5.dp, bdColor, RoundedCornerShape(10.dp))
-                    .clickable { onToggle(btn.layer) },
+                    .clickable(interactionSource = interaction, indication = null) { onToggle(btn.layer) },
             ) {
                 Icon(btn.icon, contentDescription = btn.label, tint = iconTint, modifier = Modifier.size(18.dp))
             }

@@ -38,10 +38,24 @@ class BleDataStreamerImpl @Inject constructor(
         if (rriRaw !in 0f..1f) return null                   // invalid RRI — discard
 
         val dimsCode = this[5].toInt() and 0xFF
+
+        // 0xFF = RRI-only beacon (design spec §7.1 Dynamic Dimensionality Scaling degraded mode).
+        // Emit a frame with an empty vector so consumers can detect degraded link state.
+        if (dimsCode == 0xFF) {
+            return BleDataStreamer.TelemetryFrame(
+                rriScore = RriScore(rriRaw),
+                spatialLatentVector = SpatialLatentVector(
+                    dimensions = 0,
+                    data = FloatArray(0),
+                    originTimestampMs = System.currentTimeMillis(),
+                ),
+            )
+        }
+
         val dims = when (dimsCode) {
             0x00 -> 256
             0x01 -> 512
-            else -> return null
+            else -> return null   // unknown dims code — discard
         }
         val expectedBytes = HEADER_BYTES + dims * Float.SIZE_BYTES
         if (size < expectedBytes) return null
