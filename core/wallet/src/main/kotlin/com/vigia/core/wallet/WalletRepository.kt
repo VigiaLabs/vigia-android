@@ -20,12 +20,18 @@ interface WalletRepository {
      * Builds the exact signed payload required by the validator Lambda.
      * Returned [TelemetrySignature] must be included verbatim in the telemetry POST body.
      */
+    /**
+     * [frameSha256] is the lowercase hex SHA-256 digest of the raw JPEG frame bytes,
+     * if a frame is included in the upload. When non-null the digest is appended to the
+     * signed payload, binding the frame to the signature (H2 integrity fix).
+     */
     fun signTelemetry(
         hazardType: String,
         lat: Double,
         lon: Double,
         timestamp: Long,
         confidence: Double,
+        frameSha256: String? = null,
     ): TelemetrySignature
 }
 

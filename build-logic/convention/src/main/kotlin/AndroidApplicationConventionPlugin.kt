@@ -46,8 +46,9 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                             "\"${secret("VIGIA_API_BASE_URL")}\"")
                         buildConfigField("String", "BLACKBOX_MAC",
                             "\"${secret("BLACKBOX_MAC", "00:00:00:00:00:00")}\"")
-                        buildConfigField("String", "SARVAM_API_KEY",
-                            "\"${secret("SARVAM_API_KEY")}\"")
+                        // SARVAM_API_KEY removed — Sarvam requests now go through the
+                        // backend proxy (POST /sarvam-proxy/stt|tts) which holds the key
+                        // in AWS Secrets Manager. Remove from secrets.properties as well.
                     }
                     // prod — set all env vars in CI; secrets.properties is not present
                     //         in CI runners, so env vars are the sole source.
@@ -61,8 +62,6 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                             "\"${secret("VIGIA_API_BASE_URL")}\"")
                         buildConfigField("String", "BLACKBOX_MAC",
                             "\"${secret("BLACKBOX_MAC")}\"")
-                        buildConfigField("String", "SARVAM_API_KEY",
-                            "\"${secret("SARVAM_API_KEY")}\"")
                     }
                 }
             }

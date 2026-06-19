@@ -57,11 +57,6 @@ object AppModule {
     @Named("VigiaApiBaseUrl")
     fun provideVigiaApiBaseUrl(): String = BuildConfig.VIGIA_API_BASE_URL
 
-    @Provides
-    @Singleton
-    @Named("SarvamApiKey")
-    fun provideSarvamApiKey(): String = BuildConfig.SARVAM_API_KEY
-
     /**
      * Bridges [AuthRepository.getIdToken] (suspend) into the synchronous
      * [ApiTokenProvider] interface required by OkHttp interceptors.

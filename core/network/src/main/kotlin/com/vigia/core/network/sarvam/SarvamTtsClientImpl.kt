@@ -15,21 +15,23 @@ import javax.inject.Named
 import javax.inject.Singleton
 
 /**
- * Calls the Sarvam AI TTS endpoint (POST https://api.sarvam.ai/text-to-speech).
+ * Calls the Sarvam AI TTS endpoint via the VIGIA backend proxy
+ * (POST <VIGIA_API_BASE_URL>/sarvam-proxy/tts).
+ *
+ * The proxy holds the Sarvam API key in AWS Secrets Manager — it is never
+ * included in the APK. Requests are authenticated with the Cognito JWT via
+ * the [com.vigia.core.network.auth.VigiaAuthInterceptor].
  *
  * Wire format:
- *   Request:  JSON body with inputs[], target_language_code, speaker, model="bulbul:v1"
+ *   Request:  JSON body with text, target_language_code, speaker, pitch, pace
  *   Response: { "audios": ["<base64-wav>", ...] }
  *
  * The first audio in the array is decoded from base64 and returned as raw WAV bytes.
- * Callers (TtsManager) are responsible for playback — no audio session is managed here.
- *
- * Security: API key sent via the API-Subscription-Key header. Never logged.
  */
 @Singleton
 class SarvamTtsClientImpl @Inject constructor(
-    private val okHttpClient: OkHttpClient,
-    @Named("SarvamApiKey") private val apiKey: String,
+    @Named("VigiaOkHttpClient") private val okHttpClient: OkHttpClient,
+    @Named("VigiaApiBaseUrl")   private val baseUrl: String,
 ) : SarvamTtsClient {
 
     override suspend fun synthesize(
@@ -38,22 +40,17 @@ class SarvamTtsClientImpl @Inject constructor(
         speaker: String,
     ): ByteArray = withContext(Dispatchers.IO) {
         val bodyJson = JSONObject().apply {
-            put("inputs", JSONArray().apply { put(text) })
+            put("text", text)
             put("target_language_code", languageCode)
             put("speaker", speaker)
             put("pitch", 0)
             put("pace", 1.0)
-            put("loudness", 1.5)
-            put("speech_sample_rate", 22050)
-            put("enable_preprocessing", true)
-            put("model", "bulbul:v1")
         }.toString()
 
+        val proxyUrl = baseUrl.trimEnd('/') + "/sarvam-proxy/tts"
         val request = Request.Builder()
-            .url(BASE_URL)
+            .url(proxyUrl)
             .post(bodyJson.toRequestBody(JSON_MEDIA))
-            .header("API-Subscription-Key", apiKey)
-            .header("Content-Type", "application/json")
             .build()
 
         val responseBody = okHttpClient.newCall(request).execute().use { response ->
@@ -68,7 +65,6 @@ class SarvamTtsClientImpl @Inject constructor(
     }
 
     private companion object {
-        const val BASE_URL = "https://api.sarvam.ai/text-to-speech"
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     }
 }

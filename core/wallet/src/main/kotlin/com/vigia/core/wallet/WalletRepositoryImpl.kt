@@ -58,8 +58,16 @@ class WalletRepositoryImpl @Inject constructor(
         _state.update { it.copy(isSyncing = true) }
 
         try {
+            // Ownership proof: sign "VIGIA-BALANCE:<wallet>:<timestamp>" so the
+            // backend can verify we hold the private key before returning the balance.
+            val tsMs = System.currentTimeMillis()
+            val balanceSig = keyStore.sign(
+                "VIGIA-BALANCE:$pubKey:$tsMs".toByteArray(Charsets.UTF_8)
+            )
             val request = Request.Builder()
                 .url("$baseUrl/rewards-balance?wallet_address=$pubKey")
+                .header("X-Wallet-Timestamp", tsMs.toString())
+                .header("X-Wallet-Signature", balanceSig)
                 .get()
                 .build()
             httpClient.newCall(request).execute().use { response ->
@@ -92,9 +100,15 @@ class WalletRepositoryImpl @Inject constructor(
         lon: Double,
         timestamp: Long,
         confidence: Double,
+        frameSha256: String?,
     ): TelemetrySignature {
-        // Must match validator/index.ts: `VIGIA:${hazardType}:${lat}:${lon}:${timestamp}:${confidence}`
-        val payload = "VIGIA:$hazardType:$lat:$lon:$timestamp:$confidence"
+        // Payload format must match validator/index.ts:
+        //   with frame:    VIGIA:<type>:<lat>:<lon>:<ts>:<conf>:<sha256hex>
+        //   without frame: VIGIA:<type>:<lat>:<lon>:<ts>:<conf>
+        val payload = if (frameSha256 != null)
+            "VIGIA:$hazardType:$lat:$lon:$timestamp:$confidence:$frameSha256"
+        else
+            "VIGIA:$hazardType:$lat:$lon:$timestamp:$confidence"
         val signature = keyStore.sign(payload.toByteArray(Charsets.UTF_8))
         return TelemetrySignature(
             publicKey = keyStore.publicKeyBase58,
