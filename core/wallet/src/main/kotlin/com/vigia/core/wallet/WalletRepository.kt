@@ -33,6 +33,13 @@ interface WalletRepository {
         confidence: Double,
         frameSha256: String? = null,
     ): TelemetrySignature
+
+    /**
+     * Signs arbitrary bytes with the device Ed25519 key. Used for ownership-proof
+     * messages (e.g. VIGIA-BALANCE) that are not telemetry payloads.
+     * Returns a Base58-encoded signature string.
+     */
+    fun signRaw(bytes: ByteArray): String
 }
 
 data class WalletState(

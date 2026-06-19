@@ -383,27 +383,14 @@ class CopilotViewModel @Inject constructor(
     fun requestPayout() {
         val ws = walletRepository.state.value
         if (!ws.isProvisioned || ws.pendingBalanceMicroVigia <= 0) return
-        // Provide the ownership proof headers to the Stripe repo before calling.
         val tsMs = System.currentTimeMillis()
-        val sig  = walletRepository.signTelemetry(
-            hazardType  = "PAYOUT",
-            lat         = 0.0, lon = 0.0,
-            timestamp   = tsMs,
-            confidence  = 0.0,
+        val sig  = walletRepository.signRaw(
+            "VIGIA-BALANCE:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
         )
-        // Re-use VIGIA-BALANCE proof format for the Stripe wallet proof.
-        val balanceSig = run {
-            val payloadBytes = "VIGIA-BALANCE:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
-            // Use keyStore indirectly via WalletRepository's signTelemetry — not ideal but
-            // avoids adding a new interface method just for this. The proof is verified
-            // server-side against the public key which is the same key used for telemetry.
-            // TODO: add WalletRepository.signRaw(bytes) for cleaner separation.
-            sig.signature   // placeholder — real impl needs WalletRepository.signRaw
-        }
         (stripePayRepository as? StripePayRepositoryImpl)?.setWalletProof(
             address   = ws.publicKey,
             timestamp = tsMs.toString(),
-            signature = balanceSig,
+            signature = sig,
         )
         viewModelScope.launch {
             stripePayRepository.initiatePayment(
@@ -415,13 +402,15 @@ class CopilotViewModel @Inject constructor(
 
     fun startStripeOnboarding() {
         viewModelScope.launch {
-            val ws  = walletRepository.state.value
+            val ws   = walletRepository.state.value
             val tsMs = System.currentTimeMillis()
-            val sig  = walletRepository.signTelemetry("PAYOUT", 0.0, 0.0, tsMs, 0.0)
+            val sig  = walletRepository.signRaw(
+                "VIGIA-BALANCE:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
+            )
             (stripePayRepository as? StripePayRepositoryImpl)?.setWalletProof(
                 address   = ws.publicKey,
                 timestamp = tsMs.toString(),
-                signature = sig.signature,
+                signature = sig,
             )
             stripePayRepository.startConnectOnboarding()
         }

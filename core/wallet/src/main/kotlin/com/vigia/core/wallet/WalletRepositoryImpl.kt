@@ -116,5 +116,7 @@ class WalletRepositoryImpl @Inject constructor(
         )
     }
 
+    override fun signRaw(bytes: ByteArray): String = keyStore.sign(bytes)
+
     private companion object { const val TAG = "VigiaWallet" }
 }
