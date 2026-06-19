@@ -59,6 +59,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -2135,7 +2136,9 @@ private fun WalletPane(uiState: WalletUiState, modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(12.dp))
             WalletActionRow(
-                modifier = Modifier
+                onCashOut  = { viewModel.requestPayout() },
+                onOnboard  = { viewModel.startStripeOnboarding() },
+                modifier   = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp),
             )
@@ -2314,7 +2317,11 @@ private fun BalanceHeroCard(
 }
 
 @Composable
-private fun WalletActionRow(modifier: Modifier = Modifier) {
+private fun WalletActionRow(
+    onCashOut: () -> Unit,
+    onOnboard: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier              = modifier,
@@ -2325,13 +2332,15 @@ private fun WalletActionRow(modifier: Modifier = Modifier) {
             modifier = Modifier.weight(1f),
         )
         WalletActionChip(
-            icon     = Icons.Filled.LocalFireDepartment,
-            label    = "Burn",
+            icon     = Icons.Filled.AccountBalance,
+            label    = "Link Bank",
+            onClick  = onOnboard,
             modifier = Modifier.weight(1f),
         )
         WalletActionChip(
             icon     = Icons.Filled.FileUpload,
-            label    = "Export",
+            label    = "Cash Out",
+            onClick  = onCashOut,
             modifier = Modifier.weight(1f),
         )
     }
