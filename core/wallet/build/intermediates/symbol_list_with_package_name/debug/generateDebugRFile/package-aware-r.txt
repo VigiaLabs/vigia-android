@@ -1,1 +1,0 @@
-com.vigia.core.wallet

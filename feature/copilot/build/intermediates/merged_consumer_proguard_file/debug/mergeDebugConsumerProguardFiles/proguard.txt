@@ -1,2 +1,0 @@
--keep,allowobfuscation,allowshrinking class com.vigia.feature.copilot.CopilotViewModel
--keep,allowobfuscation,allowshrinking class com.vigia.feature.copilot.CopilotViewModel
