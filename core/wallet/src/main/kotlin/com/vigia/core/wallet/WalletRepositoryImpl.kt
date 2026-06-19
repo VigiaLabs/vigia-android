@@ -32,8 +32,13 @@ class WalletRepositoryImpl @Inject constructor(
         _state.update { it.copy(publicKey = pubKey, isProvisioned = true) }
 
         try {
-            val body = JSONObject().apply { put("device_address", pubKey) }
-                .toString().toRequestBody("application/json".toMediaType())
+            // Proof-of-possession: backend requires an Ed25519 signature over
+            // "VIGIA-REGISTER:<pubkey>" to prove we hold the device private key.
+            val signature = keyStore.sign("VIGIA-REGISTER:$pubKey".toByteArray(Charsets.UTF_8))
+            val body = JSONObject().apply {
+                put("device_address", pubKey)
+                put("signature", signature)
+            }.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
                 .url("$baseUrl/register-device")
                 .post(body)
