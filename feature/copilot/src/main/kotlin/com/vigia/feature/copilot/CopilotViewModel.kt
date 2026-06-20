@@ -24,7 +24,9 @@ import com.vigia.core.sensor.context.ContextAggregator
 import com.vigia.core.sensor.tts.TtsManager
 import com.vigia.core.model.BleLinkState
 import com.vigia.core.model.DriverProfile
+import com.vigia.core.sensor.adas.FatigueProxyScorer
 import com.vigia.core.sensor.adas.HarshEventLogger
+import com.vigia.core.sensor.adas.SpeedCurveAdvisor
 import com.vigia.core.sensor.ble.BleRepository
 import com.vigia.core.sensor.profile.DriverProfileRepository
 import com.vigia.core.sensor.voice.BargeInController
@@ -72,6 +74,8 @@ class CopilotViewModel @Inject constructor(
     private val driverProfileRepository: DriverProfileRepository,
     private val harshEventLogger: HarshEventLogger,
     private val bleRepository: BleRepository,
+    private val fatigueProxyScorer: FatigueProxyScorer,
+    private val speedCurveAdvisor: SpeedCurveAdvisor,
 ) : ViewModel() {
 
     val payoutStatus = stripePayRepository.payoutStatus
@@ -447,6 +451,35 @@ class CopilotViewModel @Inject constructor(
 
         // Route-ahead monitor — start after first valid location arrives.
         routeAheadMonitor.start(locationFlow)
+
+        // Fatigue proxy scorer — starts on first BLE connection, uses same location flow.
+        fatigueProxyScorer.start(locationFlow, laneDriftDetector, viewModelScope)
+        viewModelScope.launch {
+            fatigueProxyScorer.events.collect { event ->
+                val message = when (event) {
+                    is FatigueProxyScorer.FatigueEvent.NudgeAlert    -> event.message
+                    is FatigueProxyScorer.FatigueEvent.EscalateAlert -> event.message
+                }
+                val queueMode = if (event is FatigueProxyScorer.FatigueEvent.EscalateAlert)
+                    TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+                Log.d(TAG, "Fatigue alert (F=${(event as? FatigueProxyScorer.FatigueEvent.NudgeAlert)?.score ?: (event as FatigueProxyScorer.FatigueEvent.EscalateAlert).score}): $message")
+                ttsManager.speak(message, queueMode)
+                updateActive { copy(proactiveLabel = "Fatigue advisory") }
+                delay(PROACTIVE_LABEL_CLEAR_MS)
+                updateActive { copy(proactiveLabel = "") }
+            }
+        }
+
+        // Speed/Curve advisor — fires on OSM geometry from RouteAheadMonitor
+        viewModelScope.launch {
+            speedCurveAdvisor.events.collect { event ->
+                Log.d(TAG, "Geometry advisory: ${event.message}")
+                ttsManager.speak(event.message, TextToSpeech.QUEUE_ADD)
+                updateActive { copy(proactiveLabel = event.message.take(60)) }
+                delay(PROACTIVE_LABEL_CLEAR_MS)
+                updateActive { copy(proactiveLabel = "") }
+            }
+        }
     }
 
     private fun observeRouteAhead() {

@@ -6,6 +6,7 @@ import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.LocationSnapshot
 import com.vigia.core.model.RouteAheadHazard
 import com.vigia.core.network.live.RoadAheadClient
+import com.vigia.core.sensor.adas.SpeedCurveAdvisor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -53,6 +54,7 @@ import kotlin.math.PI
 @Singleton
 class RouteAheadMonitor @Inject constructor(
     private val roadAheadClient: RoadAheadClient,
+    private val speedCurveAdvisor: SpeedCurveAdvisor,
 ) {
 
     sealed class ProactiveEvent {
@@ -77,7 +79,10 @@ class RouteAheadMonitor @Inject constructor(
     private var monitorScope: CoroutineScope? = null
     private var profile: DriverProfile = DriverProfile.NEW
 
-    fun setProfile(p: DriverProfile) { profile = p }
+    fun setProfile(p: DriverProfile) {
+        profile = p
+        speedCurveAdvisor.setProfile(p)
+    }
 
     fun start(locationFlow: Flow<LocationSnapshot>) {
         stop()
@@ -105,14 +110,20 @@ class RouteAheadMonitor @Inject constructor(
         }
 
         try {
-            val hazards = roadAheadClient.query(
+            val result = roadAheadClient.query(
                 lat = snap.latitudeDeg,
                 lon = snap.longitudeDeg,
                 bearingDeg = snap.bearingDeg.toDouble(),
                 velocityMs = snap.velocityMs,
                 lookAheadPoints = lookAheadPoints,
             )
+            val hazards = result.hazards
             _routeAheadHazards.value = hazards
+
+            // Forward OSM geometry to SpeedCurveAdvisor for speed-limit / curve announcements
+            if (result.roadGeometry.isNotEmpty()) {
+                speedCurveAdvisor.onGeometryUpdate(result.roadGeometry, snap.velocityMs)
+            }
 
             val now = System.currentTimeMillis()
             // Evict stale announced geohashes (older than 5 min).
