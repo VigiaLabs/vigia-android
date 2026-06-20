@@ -15,4 +15,7 @@ interface BleRepository {
 
     /** Writes a dims-mode opcode to CONTROL_CHAR (see [GattConstants.Control]). */
     suspend fun requestDims(dimsCode: Byte)
+
+    /** Pushes profile-scaled TTC threshold (BaseTtc × S_profile) to the edge node (M11 §3.3). */
+    suspend fun sendTtcThreshold(ttcS: Float)
 }

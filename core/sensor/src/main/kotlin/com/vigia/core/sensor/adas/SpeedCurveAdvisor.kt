@@ -61,8 +61,10 @@ class SpeedCurveAdvisor @Inject constructor() {
         announced.entries.removeIf { now - it.value > SUPPRESS_WINDOW_MS }
 
         for (adv in advisories) {
-            val triggerDistance = adv.distanceMeters * profile.sProfile
-            // Only announce if the feature is within the profile-scaled trigger distance
+            // Fire when the feature is within the profile-scaled lead window.
+            // BASE_ADVISORY_M is the reference distance for NEW (1.5×).
+            // EXPERT (0.5×) fires only within 250m; ELDERLY (3.0×) fires within 1500m.
+            val triggerDistance = BASE_ADVISORY_M * profile.sProfile
             if (adv.distanceMeters > triggerDistance) continue
 
             val key = "${adv.type.name}_${(adv.distanceMeters / 100).toInt()}"
@@ -108,5 +110,7 @@ class SpeedCurveAdvisor @Inject constructor() {
     companion object {
         private const val TAG = "SpeedCurveAdvisor"
         private const val SUPPRESS_WINDOW_MS = 2 * 60 * 1_000L
+        // Reference advisory distance for profile NEW (1.5×): 500m → EXPERT 250m, ELDERLY 1500m.
+        private const val BASE_ADVISORY_M = 500f
     }
 }

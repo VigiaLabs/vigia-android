@@ -7,6 +7,7 @@ import android.media.AudioTrack
 import android.speech.tts.TextToSpeech
 import android.speech.tts.TextToSpeech.OnInitListener
 import android.util.Log
+import com.vigia.core.model.DriverProfile
 import com.vigia.core.network.sarvam.SarvamTtsClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +61,20 @@ class TtsManager @Inject constructor(
     private val androidTts: TextToSpeech = TextToSpeech(context, this)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Profile-derived audio parameters (§3.3 spec). Applied per-speak for Android TTS
+    // and as a volume multiplier for the Sarvam AudioTrack.
+    // Base Sarvam volume is 0.6 so ELDERLY (+4 dB → ×1.585) reaches 0.95 without clipping.
+    @Volatile private var profileSpeechRate: Float = 1.0f
+    @Volatile private var profileVolume: Float = 0.6f   // linear [0,1] for AudioTrack
+
+    fun setProfile(profile: DriverProfile) {
+        profileSpeechRate = profile.ttsRate
+        // Convert dB gain to linear, anchored at 0.6 for EXPERT (0 dB).
+        profileVolume = (0.6f * Math.pow(10.0, profile.ttsGainDb / 20.0).toFloat())
+            .coerceIn(0f, 1f)
+        if (_isReady.value) androidTts.setSpeechRate(profile.ttsRate)
+    }
+
     @Volatile private var activeTrack: AudioTrack? = null
 
     private data class SpeechItem(
@@ -92,6 +107,7 @@ class TtsManager @Inject constructor(
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             androidTts.language = Locale.US
+            androidTts.setSpeechRate(profileSpeechRate)
             _isReady.value = true
         }
     }
@@ -180,6 +196,7 @@ class TtsManager @Inject constructor(
 
         activeTrack = track
         track.write(wav, 44, wav.size - 44)
+        track.setVolume(profileVolume)
 
         _isSpeaking.value = true
         try {

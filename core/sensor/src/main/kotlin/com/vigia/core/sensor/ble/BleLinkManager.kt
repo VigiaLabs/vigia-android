@@ -196,6 +196,22 @@ class BleLinkManager @Inject constructor(
         writeCharacteristic(gatt, char, byteArrayOf(dimsCode))
     }
 
+    /** Pushes profile-scaled TTC threshold to edge. Payload: [0xA0 | ttc_f32_le(4)] = 5 bytes. */
+    suspend fun sendTtcThreshold(ttcS: Float) {
+        val gatt = activeGatt ?: return
+        val char = gatt.getService(GattConstants.VIGIA_SERVICE_UUID)
+            ?.getCharacteristic(GattConstants.CONTROL_CHAR_UUID) ?: return
+        val bits = java.lang.Float.floatToRawIntBits(ttcS)
+        val payload = byteArrayOf(
+            GattConstants.Control.SET_TTC_THRESHOLD,
+            (bits and 0xFF).toByte(),
+            ((bits shr 8) and 0xFF).toByte(),
+            ((bits shr 16) and 0xFF).toByte(),
+            ((bits shr 24) and 0xFF).toByte(),
+        )
+        writeCharacteristic(gatt, char, payload)
+    }
+
     // ── Step 1 — LE scan ──────────────────────────────────────────────────────
 
     private suspend fun scanForDevice(address: String): BluetoothDevice {

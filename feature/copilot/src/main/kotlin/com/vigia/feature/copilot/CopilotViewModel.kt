@@ -86,6 +86,7 @@ class CopilotViewModel @Inject constructor(
         const val TAG = "VigiaCopilot"
         const val WALLET_POLL_INTERVAL_MS = 60_000L
         const val PROACTIVE_LABEL_CLEAR_MS = 4_000L
+        const val BASE_TTC_S = 3.0f  // §3.2: EXPERT=1.5s, NEW=4.5s, ELDERLY=9.0s via S_profile
     }
 
     private val _uiState = MutableStateFlow<CopilotUiState>(CopilotUiState.Loading)
@@ -539,7 +540,11 @@ class CopilotViewModel @Inject constructor(
             driverProfileRepository.profile.collect { profile ->
                 routeAheadMonitor.setProfile(profile)
                 laneDriftDetector.setProfile(profile)
-                Log.d(TAG, "Driver profile updated: ${profile.name} sProfile=${profile.sProfile}")
+                ttsManager.setProfile(profile)
+                // Push profile-scaled TTC threshold to edge (BaseTtc=3.0s × S_profile).
+                val ttcThreshold = BASE_TTC_S * profile.sProfile
+                runCatching { bleRepository.sendTtcThreshold(ttcThreshold) }
+                Log.d(TAG, "Driver profile updated: ${profile.name} sProfile=${profile.sProfile} ttcThreshold=${ttcThreshold}s")
             }
         }
     }

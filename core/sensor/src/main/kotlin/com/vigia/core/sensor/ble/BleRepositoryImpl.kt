@@ -23,4 +23,8 @@ class BleRepositoryImpl @Inject constructor(
     override suspend fun requestDims(dimsCode: Byte) {
         linkManager.requestDims(dimsCode)
     }
+
+    override suspend fun sendTtcThreshold(ttcS: Float) {
+        linkManager.sendTtcThreshold(ttcS)
+    }
 }

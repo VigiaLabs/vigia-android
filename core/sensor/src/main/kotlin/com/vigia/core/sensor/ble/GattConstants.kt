@@ -49,6 +49,8 @@ internal object GattConstants {
         const val REQUEST_256D: Byte = 0x00
         const val REQUEST_512D: Byte = 0x01
         const val REQUEST_RRI_ONLY: Byte = 0xFF.toByte()
+        // M11: profile-scaled TTC threshold push. Payload: [0xA0 | ttc_f32_le(4)] = 5 bytes.
+        const val SET_TTC_THRESHOLD: Byte = 0xA0.toByte()
     }
 
     /** Target ATT MTU for BLE link (design spec §7). */
