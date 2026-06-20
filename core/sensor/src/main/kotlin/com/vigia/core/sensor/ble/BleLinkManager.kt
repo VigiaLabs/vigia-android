@@ -77,7 +77,7 @@ class BleLinkManager @Inject constructor(
 
     // ── Internal GATT event bridge ────────────────────────────────────────────
 
-    private sealed interface GattEvent {
+    internal sealed interface GattEvent {
         data class ConnectionChanged(val status: Int, val newState: Int) : GattEvent
         data class MtuChanged(val mtu: Int, val status: Int) : GattEvent
         data class ServicesDiscovered(val status: Int) : GattEvent
@@ -87,7 +87,7 @@ class BleLinkManager @Inject constructor(
         data class RssiRead(val rssi: Int, val status: Int) : GattEvent
     }
 
-    private var gattEventBus = Channel<GattEvent>(Channel.BUFFERED)
+    internal var gattEventBus = Channel<GattEvent>(Channel.BUFFERED)
     private var activeGatt: BluetoothGatt? = null
 
     private val bluetoothManager by lazy { context.getSystemService(BluetoothManager::class.java) }
@@ -168,6 +168,7 @@ class BleLinkManager @Inject constructor(
             confirmDims(gatt, GattConstants.Control.REQUEST_256D)
             enableResponseNotifications(gatt)
             enableTelemetry(gatt)
+            enableAlertChar(gatt)
             _linkState.value = BleLinkState.Bound
         } catch (e: BleStepException) {
             _linkState.value = BleLinkState.Error(e.error)
@@ -391,6 +392,12 @@ class BleLinkManager @Inject constructor(
         val service = gatt.getService(GattConstants.VIGIA_SERVICE_UUID) ?: return
         val telChar = service.getCharacteristic(GattConstants.TELEMETRY_CHAR_UUID) ?: return
         enableCharNotifications(gatt, telChar)
+    }
+
+    private suspend fun enableAlertChar(gatt: BluetoothGatt) {
+        val service   = gatt.getService(GattConstants.VIGIA_SERVICE_UUID) ?: return
+        val alertChar = service.getCharacteristic(GattConstants.ALERT_CHAR_UUID) ?: return
+        enableCharNotifications(gatt, alertChar)
     }
 
     // ── GATT helpers ──────────────────────────────────────────────────────────

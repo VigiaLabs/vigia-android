@@ -16,6 +16,8 @@ internal object GattConstants {
     val TELEMETRY_CHAR_UUID: UUID = UUID.fromString("4d231514-5514-4847-bb6d-64e3aa7a3ffb")
     val CONTROL_CHAR_UUID: UUID   = UUID.fromString("0bb821dd-6b24-4185-ad69-662510769d19")
     val ATTEST_CHAR_UUID: UUID    = UUID.fromString("580c5fb6-5283-4194-84c8-5d6aec75b88a")
+    // M11: ALERT_CHAR — Pi→phone critical alerts (FCW + ADAS). Matches kAlertUuid in ble_gatt_constants.hpp.
+    val ALERT_CHAR_UUID: UUID     = UUID.fromString("c3a7d812-4f9e-4b3a-a5d2-7e1f8c0b6e94")
     // ACK/NACK/PONG replies from Pi on CONTROL_CHAR writes. Matches kResponseUuid in
     // vigia-raspi: include/vigia_edge_node/ble_gatt_constants.hpp.
     val RESPONSE_CHAR_UUID: UUID  = UUID.fromString("a3f1c2d7-88e4-4b9a-b3c1-5d7e9f012345")

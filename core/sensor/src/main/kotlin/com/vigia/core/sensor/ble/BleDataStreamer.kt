@@ -17,9 +17,29 @@ interface BleDataStreamer {
     /** Emits decoded telemetry frames whenever the Blackbox pushes data. */
     val telemetryFrames: Flow<TelemetryFrame>
 
+    /** Emits FCW (Forward Collision Warning) events from ALERT_CHAR notifications (M11). */
+    val fcwEvents: Flow<FcwEvent>
+
     data class TelemetryFrame(
         val rriScore: RriScore,
         val spatialLatentVector: SpatialLatentVector,
         val receivedAtMs: Long = System.currentTimeMillis(),
     )
+
+    /**
+     * Forward Collision Warning decoded from ALERT_CHAR.
+     * Wire format: [0x10 | ttc_f32_le(4) | class_id_u8(1)] = 6 bytes.
+     */
+    data class FcwEvent(
+        val ttcSeconds: Float,
+        val classId: Int,
+        val receivedAtMs: Long = System.currentTimeMillis(),
+    ) {
+        val targetLabel: String get() = when (classId) {
+            1    -> "vehicle"
+            2    -> "pedestrian"
+            3    -> "cyclist"
+            else -> "obstacle"
+        }
+    }
 }

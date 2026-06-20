@@ -3,7 +3,9 @@ package com.vigia.core.sensor.ble
 import com.vigia.core.model.RriScore
 import com.vigia.core.model.SpatialLatentVector
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.receiveAsFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,6 +29,25 @@ class BleDataStreamerImpl @Inject constructor(
 
     override val telemetryFrames: Flow<BleDataStreamer.TelemetryFrame> =
         linkManager.incomingFrames.mapNotNull { bytes -> bytes.toTelemetryFrame() }
+
+    // FCW payload: [0x10 | ttc_f32_le(4) | class_id_u8(1)] = 6 bytes
+    override val fcwEvents: Flow<BleDataStreamer.FcwEvent> =
+        linkManager.gattEventBus
+            .receiveAsFlow()
+            .filterIsInstance<BleLinkManager.GattEvent.CharacteristicChanged>()
+            .mapNotNull { event ->
+                if (event.charUuid != GattConstants.ALERT_CHAR_UUID) return@mapNotNull null
+                event.value.toFcwEvent()
+            }
+
+    private fun ByteArray.toFcwEvent(): BleDataStreamer.FcwEvent? {
+        if (size < FCW_PAYLOAD_BYTES) return null
+        if ((this[0].toInt() and 0xFF) != FCW_ALERT_TYPE) return null
+        val ttc = readFloat32(offset = 1)
+        if (!ttc.isFinite() || ttc <= 0f) return null
+        val classId = this[5].toInt() and 0xFF
+        return BleDataStreamer.FcwEvent(ttcSeconds = ttc, classId = classId)
+    }
 
     // ── Wire-format decoder ───────────────────────────────────────────────────
 
@@ -83,6 +104,8 @@ class BleDataStreamerImpl @Inject constructor(
 
     companion object {
         private const val FRAME_VERSION: Byte = 0x01
-        private const val HEADER_BYTES = 6   // version(1) + rri(4) + dims(1)
+        private const val HEADER_BYTES = 6       // version(1) + rri(4) + dims(1)
+        private const val FCW_ALERT_TYPE = 0x10  // matches kFcwAlert in ble_gatt_constants.hpp
+        private const val FCW_PAYLOAD_BYTES = 6  // type(1) + ttc_f32(4) + class_id(1)
     }
 }

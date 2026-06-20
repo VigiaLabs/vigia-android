@@ -27,6 +27,7 @@ import com.vigia.core.model.DriverProfile
 import com.vigia.core.sensor.adas.FatigueProxyScorer
 import com.vigia.core.sensor.adas.HarshEventLogger
 import com.vigia.core.sensor.adas.SpeedCurveAdvisor
+import com.vigia.core.sensor.ble.BleDataStreamer
 import com.vigia.core.sensor.ble.BleRepository
 import com.vigia.core.sensor.profile.DriverProfileRepository
 import com.vigia.core.sensor.voice.BargeInController
@@ -74,6 +75,7 @@ class CopilotViewModel @Inject constructor(
     private val driverProfileRepository: DriverProfileRepository,
     private val harshEventLogger: HarshEventLogger,
     private val bleRepository: BleRepository,
+    private val bleDataStreamer: BleDataStreamer,
     private val fatigueProxyScorer: FatigueProxyScorer,
     private val speedCurveAdvisor: SpeedCurveAdvisor,
 ) : ViewModel() {
@@ -476,6 +478,28 @@ class CopilotViewModel @Inject constructor(
                 Log.d(TAG, "Geometry advisory: ${event.message}")
                 ttsManager.speak(event.message, TextToSpeech.QUEUE_ADD)
                 updateActive { copy(proactiveLabel = event.message.take(60)) }
+                delay(PROACTIVE_LABEL_CLEAR_MS)
+                updateActive { copy(proactiveLabel = "") }
+            }
+        }
+
+        // Forward Collision Warning — ALERT_CHAR notifications from Pi edge node (M11).
+        observeFcwEvents()
+    }
+
+    private fun observeFcwEvents() {
+        viewModelScope.launch {
+            bleDataStreamer.fcwEvents.collect { event ->
+                val ttcFormatted = "%.1f".format(event.ttcSeconds)
+                val message = "Brake — ${event.targetLabel} stopping ahead. T T C $ttcFormatted seconds."
+                Log.w(TAG, "FCW: ${event.targetLabel} TTC=${event.ttcSeconds}s classId=${event.classId}")
+                ttsManager.speak(message, TextToSpeech.QUEUE_FLUSH)
+                updateActive {
+                    copy(
+                        proactiveLabel = "Collision Warning",
+                        orbState = OrbState.Alert,
+                    )
+                }
                 delay(PROACTIVE_LABEL_CLEAR_MS)
                 updateActive { copy(proactiveLabel = "") }
             }
