@@ -384,8 +384,9 @@ class CopilotViewModel @Inject constructor(
         val ws = walletRepository.state.value
         if (!ws.isProvisioned || ws.pendingBalanceMicroVigia <= 0) return
         val tsMs = System.currentTimeMillis()
+        // P0-3: domain-separated payout proof (distinct from the VIGIA-BALANCE read proof).
         val sig  = walletRepository.signRaw(
-            "VIGIA-BALANCE:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
+            "VIGIA-PAYOUT:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
         )
         (stripePayRepository as? StripePayRepositoryImpl)?.setWalletProof(
             address   = ws.publicKey,
@@ -404,8 +405,9 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             val ws   = walletRepository.state.value
             val tsMs = System.currentTimeMillis()
+            // P0-3: domain-separated payout proof (distinct from the VIGIA-BALANCE read proof).
             val sig  = walletRepository.signRaw(
-                "VIGIA-BALANCE:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
+                "VIGIA-PAYOUT:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
             )
             (stripePayRepository as? StripePayRepositoryImpl)?.setWalletProof(
                 address   = ws.publicKey,
