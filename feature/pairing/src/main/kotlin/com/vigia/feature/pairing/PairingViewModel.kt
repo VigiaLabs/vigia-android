@@ -156,8 +156,19 @@ class PairingViewModel @Inject constructor(
                 return@launch
             }
 
+            // P0-6: dual proof-of-possession over VIGIA-BIND:<device_id>:<wallet>:<ts>.
+            // We sign the wallet half here (Ed25519 via the TEE-backed keystore). The
+            // device half (ATECC ECDSA over the same message) must come from the Pi over
+            // BLE — pending firmware support to sign an app-supplied binding challenge.
+            // Until then deviceSig is empty: the server rejects (401) and we fall back to
+            // local-only pairing below (NetworkError branch), re-attempting on next launch.
+            val ts        = System.currentTimeMillis()
+            val bindMsg   = "VIGIA-BIND:$deviceId:$walletPubkey:$ts"
+            val walletSig = walletRepository.signRaw(bindMsg.toByteArray(Charsets.UTF_8))
+            val deviceSig = "" // TODO(firmware): obtain Pi ECDSA signature over bindMsg via BLE
+
             // Server enforces 1:1 device-wallet binding before we persist locally.
-            when (val result = claimDeviceRepository.claimDevice(deviceId, walletPubkey)) {
+            when (val result = claimDeviceRepository.claimDevice(deviceId, walletPubkey, ts, walletSig, deviceSig)) {
                 ClaimResult.Ok -> { /* proceed */ }
                 ClaimResult.DeviceTaken -> {
                     _state.value = PairingState.DeviceAlreadyClaimed(deviceId, "device_taken")

@@ -17,12 +17,21 @@ class ClaimDeviceRepositoryImpl @Inject constructor(
     @Named("VigiaApiBaseUrl") private val baseUrl: String,
 ) : ClaimDeviceRepository {
 
-    override suspend fun claimDevice(deviceId: String, walletPubkey: String): ClaimResult =
+    override suspend fun claimDevice(
+        deviceId: String,
+        walletPubkey: String,
+        ts: Long,
+        walletSig: String,
+        deviceSig: String,
+    ): ClaimResult =
         withContext(Dispatchers.IO) {
             try {
                 val body = JSONObject()
                     .put("device_id", deviceId)
                     .put("wallet_pubkey", walletPubkey)
+                    .put("ts", ts)
+                    .put("wallet_sig", walletSig)   // P0-6: Ed25519 wallet PoP
+                    .put("device_sig", deviceSig)   // P0-6: ATECC ECDSA Pi PoP (via BLE)
                     .toString()
                     .toRequestBody("application/json".toMediaType())
 
