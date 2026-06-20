@@ -48,7 +48,7 @@ class StripePayRepositoryImpl @Inject constructor(
         walletSignature = signature
     }
 
-    override suspend fun startConnectOnboarding() = withContext(Dispatchers.IO) {
+    override suspend fun startConnectOnboarding(): Unit = withContext(Dispatchers.IO) {
         _payoutStatus.value = PayoutStatus.OnboardingInProgress
         try {
             val response = post("/stripe/onboard-session", JSONObject().apply {

@@ -82,6 +82,8 @@ fun CopilotRoute(
             onSignOut       = onSignOut,
             onStartVoice    = onStartVoiceWithPermission,
             onEndVoice      = viewModel::endVoiceRecording,
+            onCashOut       = viewModel::requestPayout,
+            onOnboard       = viewModel::startStripeOnboarding,
             accountName     = accountName,
             accountEmail    = accountEmail,
         )

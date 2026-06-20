@@ -182,6 +182,8 @@ internal fun CopilotScreen(
     onSignOut: () -> Unit = {},
     onStartVoice: () -> Unit = {},
     onEndVoice: () -> Unit = {},
+    onCashOut: () -> Unit = {},
+    onOnboard: () -> Unit = {},
     accountName: String? = null,
     accountEmail: String? = null,
 ) {
@@ -202,6 +204,8 @@ internal fun CopilotScreen(
                 onSignOut       = onSignOut,
                 onStartVoice    = onStartVoice,
                 onEndVoice      = onEndVoice,
+                onCashOut       = onCashOut,
+                onOnboard       = onOnboard,
                 accountName     = accountName,
                 accountEmail    = accountEmail,
             )
@@ -266,6 +270,8 @@ private fun ActiveShell(
     onSignOut: () -> Unit,
     onStartVoice: () -> Unit,
     onEndVoice: () -> Unit,
+    onCashOut: () -> Unit = {},
+    onOnboard: () -> Unit = {},
     accountName: String?,
     accountEmail: String?,
 ) {
@@ -388,6 +394,8 @@ private fun ActiveShell(
                             LandingPager(
                                 pagerState = landingPager,
                                 state      = state,
+                                onCashOut  = onCashOut,
+                                onOnboard  = onOnboard,
                                 modifier   = Modifier.fillMaxSize(),
                             )
                         }
@@ -1152,6 +1160,8 @@ private fun Atmosphere(modifier: Modifier = Modifier) {
 private fun LandingPager(
     pagerState: PagerState,
     state: CopilotUiState.Active,
+    onCashOut: () -> Unit = {},
+    onOnboard: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // Pre-compose the immediate neighbour so heavy pages (Maps' OSMDroid MapView,
@@ -1181,8 +1191,10 @@ private fun LandingPager(
             )
             LandingTab.Map -> FramedMap(modifier = Modifier.fillMaxSize())
             LandingTab.Wallet -> WalletPane(
-                uiState  = state.walletUiState,
-                modifier = Modifier.fillMaxSize(),
+                uiState   = state.walletUiState,
+                onCashOut = onCashOut,
+                onOnboard = onOnboard,
+                modifier  = Modifier.fillMaxSize(),
             )
         }
     }
@@ -2104,7 +2116,12 @@ private fun ProfileRow(label: String, value: String, dotColor: Color?) {
 // ── Wallet pane ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun WalletPane(uiState: WalletUiState, modifier: Modifier = Modifier) {
+private fun WalletPane(
+    uiState: WalletUiState,
+    onCashOut: () -> Unit = {},
+    onOnboard: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val animatedBalance by animateFloatAsState(
         targetValue   = uiState.balanceVga.toFloat(),
         animationSpec = spring(stiffness = Spring.StiffnessLow),
@@ -2136,8 +2153,8 @@ private fun WalletPane(uiState: WalletUiState, modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(12.dp))
             WalletActionRow(
-                onCashOut  = { viewModel.requestPayout() },
-                onOnboard  = { viewModel.startStripeOnboarding() },
+                onCashOut  = onCashOut,
+                onOnboard  = onOnboard,
                 modifier   = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp),
