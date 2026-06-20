@@ -1,6 +1,7 @@
 package com.vigia.core.sensor.voice
 
 import android.util.Log
+import com.vigia.core.model.DriverProfile
 import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.LocationSnapshot
 import com.vigia.core.model.RouteAheadHazard
@@ -74,6 +75,9 @@ class RouteAheadMonitor @Inject constructor(
 
     private val announcedGeohashes = LinkedHashMap<String, Long>()
     private var monitorScope: CoroutineScope? = null
+    private var profile: DriverProfile = DriverProfile.NEW
+
+    fun setProfile(p: DriverProfile) { profile = p }
 
     fun start(locationFlow: Flow<LocationSnapshot>) {
         stop()
@@ -95,7 +99,8 @@ class RouteAheadMonitor @Inject constructor(
     }
 
     private suspend fun scanAhead(snap: LocationSnapshot) {
-        val lookAheadPoints = LOOK_AHEAD_DISTANCES_M.map { distanceM ->
+        val scaledDistances = BASE_LOOK_AHEAD_DISTANCES_M.map { it * profile.sProfile }
+        val lookAheadPoints = scaledDistances.map { distanceM ->
             projectPoint(snap.latitudeDeg, snap.longitudeDeg, snap.bearingDeg.toDouble(), distanceM)
         }
 
@@ -193,6 +198,7 @@ class RouteAheadMonitor @Inject constructor(
         private const val TAG = "RouteAheadMonitor"
         private const val MIN_MOVING_SPEED_MS  = 3f          // ~10 km/h
         private const val SCAN_INTERVAL_MS     = 5_000L
-        private val LOOK_AHEAD_DISTANCES_M = listOf(200.0, 500.0, 1000.0)
+        // Base distances; scaled by DriverProfile.sProfile at runtime.
+        private val BASE_LOOK_AHEAD_DISTANCES_M = listOf(200.0, 500.0, 1000.0)
     }
 }

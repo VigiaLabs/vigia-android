@@ -22,6 +22,11 @@ import com.vigia.core.network.search.VigiaSearchClient
 import com.vigia.core.sensor.cdm.CdmPresenceRepository
 import com.vigia.core.sensor.context.ContextAggregator
 import com.vigia.core.sensor.tts.TtsManager
+import com.vigia.core.model.BleLinkState
+import com.vigia.core.model.DriverProfile
+import com.vigia.core.sensor.adas.HarshEventLogger
+import com.vigia.core.sensor.ble.BleRepository
+import com.vigia.core.sensor.profile.DriverProfileRepository
 import com.vigia.core.sensor.voice.BargeInController
 import com.vigia.core.sensor.voice.ConversationContextManager
 import com.vigia.core.sensor.voice.LaneDriftDetector
@@ -64,6 +69,9 @@ class CopilotViewModel @Inject constructor(
     private val conversationContextManager: ConversationContextManager,
     private val walletRepository: WalletRepository,
     private val stripePayRepository: StripePayRepository,
+    private val driverProfileRepository: DriverProfileRepository,
+    private val harshEventLogger: HarshEventLogger,
+    private val bleRepository: BleRepository,
 ) : ViewModel() {
 
     val payoutStatus = stripePayRepository.payoutStatus
@@ -111,6 +119,8 @@ class CopilotViewModel @Inject constructor(
         observeTtsAmplitude()
         observeWalletState()
         observeRouteAhead()
+        observeDriverProfile()
+        observeBleLifecycle()
         startWalletPolling()
         startDrivingAssistance()
     }
@@ -461,6 +471,65 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             routeAheadMonitor.routeAheadHazards.collect { hazards ->
                 updateActive { copy(routeAheadHazards = hazards) }
+            }
+        }
+    }
+
+    // ── Driver profile & trip lifecycle ──────────────────────────────────────
+
+    private fun observeDriverProfile() {
+        viewModelScope.launch {
+            driverProfileRepository.profile.collect { profile ->
+                routeAheadMonitor.setProfile(profile)
+                laneDriftDetector.setProfile(profile)
+                Log.d(TAG, "Driver profile updated: ${profile.name} sProfile=${profile.sProfile}")
+            }
+        }
+    }
+
+    /** Called from UI when user selects a profile in onboarding or settings. */
+    fun setDriverProfile(profile: DriverProfile) {
+        viewModelScope.launch { driverProfileRepository.setProfile(profile) }
+    }
+
+    private var currentTripId: String? = null
+
+    private fun observeBleLifecycle() {
+        viewModelScope.launch {
+            var wasBound = false
+            bleRepository.linkState.collect { state ->
+                val isBound = state is BleLinkState.Bound
+                if (isBound && !wasBound) onBleConnected()
+                if (!isBound && wasBound && state is BleLinkState.Idle) onBleDisconnected()
+                wasBound = isBound
+            }
+        }
+    }
+
+    /** Called when BLE blackbox connects — starts a new trip. */
+    fun onBleConnected() {
+        val tripId = UUID.randomUUID().toString()
+        currentTripId = tripId
+        viewModelScope.launch {
+            val profile = driverProfileRepository.profile.stateIn(viewModelScope).value
+            harshEventLogger.startTrip(tripId, profile)
+        }
+    }
+
+    /** Called when BLE blackbox disconnects (engine-off proxy) — ends trip and speaks debrief. */
+    fun onBleDisconnected() {
+        viewModelScope.launch {
+            // pendingBalanceVigia in VIGIA tokens → rough INR for debrief text only (not financial)
+            val balance = walletRepository.state.value.pendingBalanceVigia * 0.01
+            val debrief = harshEventLogger.endTrip(earningsRupees = balance)
+            currentTripId = null
+            if (debrief != null) {
+                Log.d(TAG, "Trip debrief: $debrief")
+                // Flush any ongoing response before the debrief plays.
+                ttsManager.speak(debrief, TextToSpeech.QUEUE_FLUSH)
+                updateActive { copy(proactiveLabel = "Trip summary") }
+                delay(PROACTIVE_LABEL_CLEAR_MS)
+                updateActive { copy(proactiveLabel = "") }
             }
         }
     }

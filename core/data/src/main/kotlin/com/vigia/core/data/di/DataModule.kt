@@ -6,6 +6,7 @@ import com.vigia.core.data.ChatRepository
 import com.vigia.core.data.ChatRepositoryImpl
 import com.vigia.core.data.db.ChatMessageDao
 import com.vigia.core.data.db.ChatSessionDao
+import com.vigia.core.data.db.HarshEventDao
 import com.vigia.core.data.db.VigiaDatabase
 import dagger.Binds
 import dagger.Module
@@ -33,6 +34,9 @@ object DatabaseModule {
 
     @Provides
     fun provideChatMessageDao(db: VigiaDatabase): ChatMessageDao = db.chatMessageDao()
+
+    @Provides
+    fun provideHarshEventDao(db: VigiaDatabase): HarshEventDao = db.harshEventDao()
 }
 
 @Module

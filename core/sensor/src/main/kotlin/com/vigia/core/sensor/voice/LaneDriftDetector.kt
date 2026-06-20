@@ -1,5 +1,6 @@
 package com.vigia.core.sensor.voice
 
+import com.vigia.core.model.DriverProfile
 import com.vigia.core.model.LocationSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,9 @@ class LaneDriftDetector @Inject constructor() {
     private val bearingWindow = LinkedList<BearingSample>()
     private var lastAlertMs = 0L
     private var detectorScope: CoroutineScope? = null
+    private var profile: DriverProfile = DriverProfile.NEW
+
+    fun setProfile(p: DriverProfile) { profile = p }
 
     fun start(locationFlow: Flow<LocationSnapshot>) {
         stop()
@@ -90,7 +94,8 @@ class LaneDriftDetector @Inject constructor() {
             if (deltas[i - 1] * deltas[i] < 0) signChanges++
         }
 
-        val isDrift = maxDelta in DRIFT_MIN_DEG..DRIFT_MAX_DEG && signChanges >= MIN_SIGN_CHANGES
+        val scaledMin = BASE_DRIFT_MIN_DEG / profile.sProfile
+        val isDrift = maxDelta in scaledMin..DRIFT_MAX_DEG && signChanges >= MIN_SIGN_CHANGES
         if (!isDrift) return
         if (now - lastAlertMs < COOLDOWN_MS) return
 
@@ -119,7 +124,7 @@ class LaneDriftDetector @Inject constructor() {
         private const val MIN_DRIVING_SPEED_MS = 7f           // ~25 km/h — ignore parking lots
         private const val WINDOW_MS            = 4_000L        // 4-second analysis window
         private const val MIN_SAMPLES          = 4             // need at least 4 GPS fixes
-        private const val DRIFT_MIN_DEG        = 2f            // below this = noise
+        private const val BASE_DRIFT_MIN_DEG   = 2f            // scaled by 1/sProfile at runtime
         private const val DRIFT_MAX_DEG        = 10f           // above this = intentional turn
         private const val MIN_SIGN_CHANGES     = 3             // oscillation signature
         private const val COOLDOWN_MS          = 30_000L       // 30-second inter-alert gap
