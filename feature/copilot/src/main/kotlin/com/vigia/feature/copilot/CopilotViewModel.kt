@@ -9,6 +9,7 @@ import com.vigia.core.network.stripe.StripePayRepository
 import com.vigia.core.network.stripe.StripePayRepositoryImpl
 import com.vigia.core.model.ChatMessage
 import com.vigia.core.model.ChatSession
+import com.vigia.core.model.ConversationTurn
 import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.MessageRole
 import com.vigia.core.model.MessageSource
@@ -21,6 +22,11 @@ import com.vigia.core.network.search.VigiaSearchClient
 import com.vigia.core.sensor.cdm.CdmPresenceRepository
 import com.vigia.core.sensor.context.ContextAggregator
 import com.vigia.core.sensor.tts.TtsManager
+import com.vigia.core.sensor.voice.BargeInController
+import com.vigia.core.sensor.voice.ConversationContextManager
+import com.vigia.core.sensor.voice.LaneDriftDetector
+import com.vigia.core.sensor.voice.LiveVadEngine
+import com.vigia.core.sensor.voice.RouteAheadMonitor
 import com.vigia.core.sensor.voice.VoiceAmplitudeMonitor
 import com.vigia.core.wallet.WalletRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,6 +40,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -50,6 +57,11 @@ class CopilotViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val sarvamSttClient: SarvamSttClient,
     private val voiceAmplitudeMonitor: VoiceAmplitudeMonitor,
+    private val liveVadEngine: LiveVadEngine,
+    private val bargeInController: BargeInController,
+    private val laneDriftDetector: LaneDriftDetector,
+    private val routeAheadMonitor: RouteAheadMonitor,
+    private val conversationContextManager: ConversationContextManager,
     private val walletRepository: WalletRepository,
     private val stripePayRepository: StripePayRepository,
 ) : ViewModel() {
@@ -59,6 +71,7 @@ class CopilotViewModel @Inject constructor(
     private companion object {
         const val TAG = "VigiaCopilot"
         const val WALLET_POLL_INTERVAL_MS = 60_000L
+        const val PROACTIVE_LABEL_CLEAR_MS = 4_000L
     }
 
     private val _uiState = MutableStateFlow<CopilotUiState>(CopilotUiState.Loading)
@@ -66,7 +79,7 @@ class CopilotViewModel @Inject constructor(
 
     private val _latestContext = MutableStateFlow<VigiaSearchContext?>(null)
 
-    // ── Session state — exposed to the Route as stable StateFlows ─────────────
+    // ── Session state ─────────────────────────────────────────────────────────
 
     private val _activeSessionId = MutableStateFlow<String?>(null)
     val activeSessionId: StateFlow<String?> = _activeSessionId.asStateFlow()
@@ -97,36 +110,28 @@ class CopilotViewModel @Inject constructor(
         observeAlerts()
         observeTtsAmplitude()
         observeWalletState()
+        observeRouteAhead()
         startWalletPolling()
+        startDrivingAssistance()
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /**
-     * Primary entry point for user messages. Creates a session on first send,
-     * persists the USER message to Room, then kicks off the SSE search.
-     *
-     * Ordering is intentional: _activeSessionId is set AFTER the USER message
-     * is already in Room so that when the composable switches to session mode,
-     * sessionMessages immediately emits [USER] — no blank-thread window.
-     */
     fun sendMessage(text: String) {
         if (text.isBlank()) return
         val baseContext = _latestContext.value
         if (baseContext == null) {
-            Log.w(TAG, "sendMessage('${text.take(20)}') DROPPED — _latestContext is null (sensor context not ready)")
-            // If in a voice session, reopen the mic so the overlay doesn't get stuck.
+            Log.w(TAG, "sendMessage DROPPED — sensor context not ready")
             val active = _uiState.value as? CopilotUiState.Active
-            if (active?.isVoiceOverlayVisible == true) reopenMic()
+            if (active?.isVoiceOverlayVisible == true) reopenAutoMic()
             return
         }
 
         viewModelScope.launch {
             val trimmed = text.trim()
+            conversationContextManager.addUserTurn(trimmed)
             val sessionId = getOrCreateSessionId(trimmed)
 
-            // Persist USER message before switching the active session so the
-            // Room Flow already has [USER] when the composable first observes it.
             chatRepository.insertMessage(
                 ChatMessage(
                     id        = UUID.randomUUID().toString(),
@@ -136,13 +141,13 @@ class CopilotViewModel @Inject constructor(
                     createdAt = System.currentTimeMillis(),
                 )
             )
-
-            // Switch to session mode now — Room already has the USER row.
             _activeSessionId.value = sessionId
 
             val context = baseContext.copy(
-                queryText   = trimmed,
-                timestampMs = System.currentTimeMillis(),
+                queryText            = trimmed,
+                timestampMs          = System.currentTimeMillis(),
+                conversationHistory  = conversationContextManager.history().dropLast(1), // exclude current turn
+                routeAheadHazards    = routeAheadMonitor.routeAheadHazards.value,
             )
             startSearch(context, sessionId)
         }
@@ -160,10 +165,10 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
-    /** Load a past session — clears any in-flight stream and switches the message feed. */
     fun loadSession(id: String) {
         searchJob?.cancel()
         _activeSessionId.value = id
+        conversationContextManager.clear()
         updateActive {
             copy(
                 orbState          = OrbState.Idle,
@@ -178,10 +183,10 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
-    /** "New chat" — resets to the greeting home state with no active session. */
     fun newSession() {
         searchJob?.cancel()
         _activeSessionId.value = null
+        conversationContextManager.clear()
         updateActive {
             copy(
                 orbState          = OrbState.Active,
@@ -203,19 +208,12 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
-    // ── Voice mode ────────────────────────────────────────────────────────────
+    // ── Voice mode — manual (legacy tap-to-send) ──────────────────────────────
 
-    /**
-     * Opens the voice overlay and starts microphone capture.
-     * Only starts if we are not already recording (guards against the auto-loop
-     * firing while the session was dismissed mid-flight).
-     * RECORD_AUDIO permission must be granted before calling — [CopilotRoute] owns that gate.
-     */
     fun startVoiceMode() {
         val current = _uiState.value as? CopilotUiState.Active ?: return
-        // Don't restart recording if already Listening or Processing.
-        // Paused is allowed — resumeVoiceMode routes through here.
         if (current.voiceListeningState == VoiceListeningState.Listening ||
+            current.voiceListeningState == VoiceListeningState.AutoListening ||
             current.voiceListeningState == VoiceListeningState.Processing) return
 
         voiceAmplitudeMonitor.startRecording()
@@ -224,9 +222,9 @@ class CopilotViewModel @Inject constructor(
                 isVoiceOverlayVisible = true,
                 voiceListeningState   = VoiceListeningState.Listening,
                 orbState              = OrbState.Listening,
+                isAutoVadActive       = false,
             )
         }
-        // Collect live amplitude and push it into UI so AuroraMist responds in real-time.
         viewModelScope.launch {
             voiceAmplitudeMonitor.amplitude.collect { amp ->
                 updateActive { copy(voiceAmplitude = amp) }
@@ -235,11 +233,27 @@ class CopilotViewModel @Inject constructor(
     }
 
     /**
-     * Stops recording, transcribes via Sarvam STT, then runs the search pipeline.
-     * The aurora mist stays visible and transitions to Processing state while STT runs.
-     * On blank transcript or STT error the mic reopens for another attempt instead of
-     * closing the overlay — the user stays in the conversational session.
+     * Gemini Live-style hands-free mode. Starts the VAD engine and monitors for
+     * barge-in while AI is speaking. The user never needs to tap — just speak
+     * naturally and the engine auto-detects the end of each utterance.
      */
+    fun startAutoVoiceMode() {
+        val current = _uiState.value as? CopilotUiState.Active ?: return
+        if (current.voiceListeningState == VoiceListeningState.AutoListening ||
+            current.voiceListeningState == VoiceListeningState.Processing) return
+
+        liveVadEngine.start()
+        updateActive {
+            copy(
+                isVoiceOverlayVisible = true,
+                voiceListeningState   = VoiceListeningState.AutoListening,
+                orbState              = OrbState.Listening,
+                isAutoVadActive       = true,
+            )
+        }
+        observeVadEvents()
+    }
+
     fun endVoiceRecording() {
         val current = _uiState.value as? CopilotUiState.Active ?: return
         if (current.voiceListeningState != VoiceListeningState.Listening) return
@@ -255,10 +269,8 @@ class CopilotViewModel @Inject constructor(
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
                 if (transcript.isNotBlank() && _latestContext.value != null) {
-                    sendMessage(transcript)  // triggers search → Sarvam TTS on Done
+                    sendMessage(transcript)
                 } else {
-                    // Blank transcript or sensor context not ready — reopen mic.
-                    Log.w(TAG, "Voice: blank transcript or no context, reopening mic")
                     reopenMic()
                 }
             } catch (e: Exception) {
@@ -268,21 +280,26 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Resets voice state to Idle then immediately reopens the mic so the user
-     * can speak again without leaving the voice session.
-     * Called on blank STT result or network errors so the overlay never closes
-     * unexpectedly mid-conversation.
-     */
     private fun reopenMic() {
-        // Reset to Idle first so startVoiceMode's guard passes.
         updateActive { copy(voiceListeningState = VoiceListeningState.Idle) }
         startVoiceMode()
     }
 
-    /** Cancels recording, stops any queued/active TTS, and hides the overlay. */
+    private fun reopenAutoMic() {
+        liveVadEngine.start()
+        updateActive {
+            copy(
+                voiceListeningState = VoiceListeningState.AutoListening,
+                orbState            = OrbState.Listening,
+                voiceAmplitude      = 0f,
+            )
+        }
+    }
+
     fun dismissVoiceOverlay() {
         voiceAmplitudeMonitor.stopSilently()
+        liveVadEngine.stop()
+        bargeInController.stopMonitoring()
         ttsManager.stop()
         updateActive {
             copy(
@@ -290,16 +307,19 @@ class CopilotViewModel @Inject constructor(
                 voiceAmplitude        = 0f,
                 voiceListeningState   = VoiceListeningState.Idle,
                 orbState              = OrbState.Active,
+                isAutoVadActive       = false,
             )
         }
     }
 
-    /** Mutes the mic and pauses TTS — overlay stays open, session is preserved. */
     fun holdVoiceMode() {
         val current = _uiState.value as? CopilotUiState.Active ?: return
         if (current.voiceListeningState != VoiceListeningState.Listening &&
+            current.voiceListeningState != VoiceListeningState.AutoListening &&
             current.voiceListeningState != VoiceListeningState.Speaking) return
         voiceAmplitudeMonitor.stopSilently()
+        liveVadEngine.stop()
+        bargeInController.stopMonitoring()
         ttsManager.stop()
         updateActive {
             copy(
@@ -309,18 +329,144 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
-    /** Resumes recording after a hold — re-opens the mic for the next user turn. */
     fun resumeVoiceMode() {
         val current = _uiState.value as? CopilotUiState.Active ?: return
         if (current.voiceListeningState != VoiceListeningState.Paused) return
         updateActive { copy(voiceListeningState = VoiceListeningState.Idle) }
-        startVoiceMode()
+        if (current.isAutoVadActive) startAutoVoiceMode() else startVoiceMode()
+    }
+
+    // ── VAD event wiring ──────────────────────────────────────────────────────
+
+    private var vadObserveJob: Job? = null
+
+    private fun observeVadEvents() {
+        vadObserveJob?.cancel()
+        vadObserveJob = viewModelScope.launch {
+            liveVadEngine.events.collect { event ->
+                when (event) {
+                    is LiveVadEngine.VadEvent.AmplitudeUpdate ->
+                        updateActive { copy(voiceAmplitude = event.rms) }
+
+                    is LiveVadEngine.VadEvent.SpeechStart ->
+                        updateActive { copy(orbState = OrbState.Listening) }
+
+                    is LiveVadEngine.VadEvent.UtteranceComplete -> {
+                        liveVadEngine.stop()  // stop VAD; search pipeline takes over
+                        updateActive {
+                            copy(
+                                voiceListeningState = VoiceListeningState.Processing,
+                                orbState            = OrbState.Searching,
+                                voiceAmplitude      = 0f,
+                            )
+                        }
+                        transcribeAndSearch(event.wav)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun transcribeAndSearch(wav: ByteArray) {
+        viewModelScope.launch {
+            try {
+                val transcript = sarvamSttClient.transcribe(wav)
+                if (transcript.isNotBlank() && _latestContext.value != null) {
+                    sendMessage(transcript)
+                } else {
+                    reopenAutoMic()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "VAD STT error — reopening mic", e)
+                reopenAutoMic()
+            }
+        }
+    }
+
+    private fun observeBargeIn() {
+        viewModelScope.launch {
+            bargeInController.events.collectLatest { event ->
+                when (event) {
+                    is BargeInController.BargeInEvent.Detected -> {
+                        val active = _uiState.value as? CopilotUiState.Active ?: return@collectLatest
+                        if (active.voiceListeningState != VoiceListeningState.Speaking) return@collectLatest
+                        Log.d(TAG, "Barge-in detected — interrupting TTS")
+                        ttsManager.stop()
+                        searchJob?.cancel()
+                        bargeInController.stopMonitoring()
+                        updateActive {
+                            copy(
+                                voiceListeningState = VoiceListeningState.BargeIn,
+                                orbState            = OrbState.Listening,
+                                voiceAmplitude      = 0f,
+                            )
+                        }
+                        // Brief pause so the VAD doesn't immediately pick up TTS bleed-through.
+                        delay(200)
+                        reopenAutoMic()
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Driving assistance observers ──────────────────────────────────────────
+
+    private fun startDrivingAssistance() {
+        // Lane drift detection — feeds from GPS location flow.
+        val locationFlow = contextAggregator.searchContext.map { it.location }
+        laneDriftDetector.start(locationFlow)
+        viewModelScope.launch {
+            laneDriftDetector.events.collect { event ->
+                when (event) {
+                    is LaneDriftDetector.DriftEvent.DriftDetected -> {
+                        Log.d(TAG, "Lane drift: ${event.message}")
+                        ttsManager.speak(event.message, TextToSpeech.QUEUE_ADD)
+                        updateActive {
+                            copy(
+                                proactiveLabel = "Lane drift detected",
+                                orbState = if (orbState != OrbState.Alert) OrbState.Alert else orbState,
+                            )
+                        }
+                        delay(PROACTIVE_LABEL_CLEAR_MS)
+                        updateActive { copy(proactiveLabel = "") }
+                    }
+                }
+            }
+        }
+
+        // Route-ahead monitor — start after first valid location arrives.
+        routeAheadMonitor.start(locationFlow)
+    }
+
+    private fun observeRouteAhead() {
+        // Push route-ahead events as proactive TTS announcements.
+        viewModelScope.launch {
+            routeAheadMonitor.proactiveEvents.collect { event ->
+                val message = when (event) {
+                    is RouteAheadMonitor.ProactiveEvent.HazardAhead ->
+                        event.message
+                    is RouteAheadMonitor.ProactiveEvent.RoadQualityWarning ->
+                        event.message
+                }
+                Log.d(TAG, "Proactive route alert: $message")
+                ttsManager.speak(message, TextToSpeech.QUEUE_ADD)
+                updateActive { copy(proactiveLabel = message.take(60)) }
+                delay(PROACTIVE_LABEL_CLEAR_MS)
+                updateActive { copy(proactiveLabel = "") }
+            }
+        }
+
+        // Sync routeAheadHazards into UI for the LLM context display.
+        viewModelScope.launch {
+            routeAheadMonitor.routeAheadHazards.collect { hazards ->
+                updateActive { copy(routeAheadHazards = hazards) }
+            }
+        }
     }
 
     // ── Private observers ─────────────────────────────────────────────────────
 
-    // Feeds TTS playback amplitude into voiceAmplitude during Speaking state so the
-    // orb and aurora animate to the AI's voice exactly like they do to the user's.
     private fun observeTtsAmplitude() {
         viewModelScope.launch {
             ttsManager.ttsAmplitude.collect { amp ->
@@ -384,7 +530,6 @@ class CopilotViewModel @Inject constructor(
         val ws = walletRepository.state.value
         if (!ws.isProvisioned || ws.pendingBalanceMicroVigia <= 0) return
         val tsMs = System.currentTimeMillis()
-        // P0-3: domain-separated payout proof (distinct from the VIGIA-BALANCE read proof).
         val sig  = walletRepository.signRaw(
             "VIGIA-PAYOUT:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
         )
@@ -395,7 +540,7 @@ class CopilotViewModel @Inject constructor(
         )
         viewModelScope.launch {
             stripePayRepository.initiatePayment(
-                amountCents = ws.pendingBalanceMicroVigia / 10_000L, // micro-VGA → USD cents (1 VGA = $1)
+                amountCents = ws.pendingBalanceMicroVigia / 10_000L,
                 currency    = "usd",
             )
         }
@@ -405,7 +550,6 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             val ws   = walletRepository.state.value
             val tsMs = System.currentTimeMillis()
-            // P0-3: domain-separated payout proof (distinct from the VIGIA-BALANCE read proof).
             val sig  = walletRepository.signRaw(
                 "VIGIA-PAYOUT:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
             )
@@ -457,8 +601,6 @@ class CopilotViewModel @Inject constructor(
                                     completedSteps = completedSteps + event.message,
                                 )
                             }
-                            // During voice sessions narrate each reasoning step so
-                            // the user hears the agent thinking before the answer plays.
                             if (isVoice && event.message.isNotBlank()) {
                                 ttsManager.speakSarvam(event.message)
                             }
@@ -477,18 +619,19 @@ class CopilotViewModel @Inject constructor(
                             }
 
                         SearchEvent.Done -> {
-                            // Capture final state before clearing streaming flag so we
-                            // persist exactly what the user saw rendered.
                             val finalState = _uiState.value as? CopilotUiState.Active
-                            val wasVoiceActive = finalState?.isVoiceOverlayVisible == true
+                            val wasVoiceActive  = finalState?.isVoiceOverlayVisible == true
+                            val wasAutoVad      = finalState?.isAutoVadActive == true
 
                             if (finalState != null) {
+                                val answerText = finalState.searchAnswer
+                                conversationContextManager.addAssistantTurn(answerText)
                                 chatRepository.insertMessage(
                                     ChatMessage(
                                         id             = UUID.randomUUID().toString(),
                                         sessionId      = sessionId,
                                         role           = MessageRole.ASSISTANT,
-                                        body           = finalState.searchAnswer,
+                                        body           = answerText,
                                         sources        = finalState.searchSources.toMessageSources(),
                                         reasoningSteps = finalState.completedSteps,
                                         latencyMs      = finalState.totalLatencyMs,
@@ -499,53 +642,47 @@ class CopilotViewModel @Inject constructor(
                                 chatRepository.bumpSession(sessionId)
                             }
 
-                            // Clear streaming fields — the message now lives in Room.
-                            // Keep the voice overlay visible if it was open; TTS will play
-                            // inside it and the onDone callback re-opens the mic for the
-                            // next conversational turn.
                             updateActive {
                                 copy(
-                                    orbState          = OrbState.Active,
-                                    isSearchStreaming = false,
-                                    // Voice overlay stays open — transitions to Speaking state.
+                                    orbState            = OrbState.Active,
+                                    isSearchStreaming   = false,
                                     voiceListeningState = if (wasVoiceActive)
                                         VoiceListeningState.Speaking else VoiceListeningState.Idle,
-                                    voiceAmplitude   = 0f,
-                                    searchStep       = "",
-                                    searchAnswer     = "",
-                                    searchSources    = emptyList(),
-                                    completedSteps   = emptyList(),
-                                    totalLatencyMs   = 0L,
+                                    voiceAmplitude      = 0f,
+                                    searchStep          = "",
+                                    searchAnswer        = "",
+                                    searchSources       = emptyList(),
+                                    completedSteps      = emptyList(),
+                                    totalLatencyMs      = 0L,
                                 )
                             }
 
-                            // Speak the answer. onDone fires on IO thread after AudioTrack
-                            // drains — jump back to Main and restart the mic for next turn.
                             val answer = finalState?.searchAnswer.orEmpty()
                             if (answer.isNotBlank()) {
+                                // Start barge-in monitor BEFORE TTS starts so even the first
+                                // syllable of the answer can be interrupted.
+                                if (wasVoiceActive) bargeInController.startMonitoring()
+                                observeBargeIn()
+
                                 ttsManager.speakSarvam(answer) {
                                     viewModelScope.launch {
-                                        if (wasVoiceActive &&
-                                            (_uiState.value as? CopilotUiState.Active)
-                                                ?.isVoiceOverlayVisible == true) {
-                                            // Auto-loop: reopen mic for next user turn.
-                                            startVoiceMode()
+                                        bargeInController.stopMonitoring()
+                                        val stillOpen = (_uiState.value as? CopilotUiState.Active)
+                                            ?.isVoiceOverlayVisible == true
+                                        if (stillOpen) {
+                                            if (wasAutoVad) reopenAutoMic() else reopenMic()
                                         }
                                     }
                                 }
                             } else if (wasVoiceActive) {
-                                // Empty answer — just reopen the mic.
-                                startVoiceMode()
+                                if (wasAutoVad) reopenAutoMic() else reopenMic()
                             }
                         }
                     }
                 }
             } catch (e: CancellationException) {
-                // User-initiated cancel — do NOT flush partial tokens.
                 throw e
             } catch (e: Exception) {
-                // Network loss or unexpected error mid-stream.
-                // Flush whatever partial tokens arrived so the session isn't empty.
                 val partial = (_uiState.value as? CopilotUiState.Active)?.searchAnswer.orEmpty()
                 if (partial.isNotBlank()) {
                     val steps = (_uiState.value as? CopilotUiState.Active)?.completedSteps
@@ -574,9 +711,6 @@ class CopilotViewModel @Inject constructor(
                     )
                 }
             } finally {
-                // Safety net: if the stream ever completes without delivering a
-                // Done event (early server close, dropped terminal event), make
-                // sure the "Generating response" indicator is never left stuck on.
                 if ((_uiState.value as? CopilotUiState.Active)?.isSearchStreaming == true) {
                     updateActive {
                         copy(
@@ -592,8 +726,6 @@ class CopilotViewModel @Inject constructor(
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /** Returns the current active session ID, or creates a new session and returns its ID.
-     *  Does NOT update _activeSessionId — the caller does that after persisting the USER message. */
     private suspend fun getOrCreateSessionId(firstMessage: String): String {
         val existing = _activeSessionId.value
         if (existing != null) return existing

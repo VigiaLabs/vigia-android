@@ -179,9 +179,31 @@ class OkHttpSseSearchClient @Inject constructor(
             put("rriScore",       ctx.rriScore.value)
             put("timestampMs",    ctx.timestampMs)
         }
+        val historyArr = JSONArray().also { arr ->
+            ctx.conversationHistory.forEach { turn ->
+                arr.put(JSONObject().apply {
+                    put("role", turn.role.name.lowercase())
+                    put("text", turn.text)
+                })
+            }
+        }
+        val hazardsArr = JSONArray().also { arr ->
+            ctx.routeAheadHazards.forEach { h ->
+                arr.put(JSONObject().apply {
+                    put("geohash",       h.geohash)
+                    put("distance_m",    h.distanceMeters)
+                    put("hazard_type",   h.hazardType)
+                    put("severity",      h.severity.name)
+                    put("avg_rri",       h.avgRriScore)
+                    put("eta_s",         h.etaSeconds)
+                })
+            }
+        }
         return JSONObject().apply {
-            put("query",   ctx.queryText)
-            put("context", contextObj)
+            put("query",             ctx.queryText)
+            put("context",           contextObj)
+            put("conversationHistory", historyArr)
+            put("routeAheadHazards", hazardsArr)
         }.toString()
     }
 }

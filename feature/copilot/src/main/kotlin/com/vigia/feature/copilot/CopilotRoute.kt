@@ -68,24 +68,43 @@ fun CopilotRoute(
         { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
     }
 
+    // Auto (Gemini Live-style) voice mode launcher — same permission gate.
+    val autoMicLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            viewModel.startAutoVoiceMode()
+        } else {
+            Toast.makeText(
+                context,
+                "Microphone permission is required for voice mode",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+    val onStartAutoVoiceWithPermission = remember(autoMicLauncher) {
+        { autoMicLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         CopilotScreen(
-            uiState         = uiState,
-            sessions        = sessions,
-            sessionMessages = sessionMessages,
-            activeSessionId = activeSessionId,
-            onSendMessage   = viewModel::sendMessage,
-            onCancelSearch  = viewModel::cancelSearch,
-            onNewChat       = viewModel::newSession,
-            onLoadSession   = viewModel::loadSession,
-            onDeleteSession = viewModel::deleteSession,
-            onSignOut       = onSignOut,
-            onStartVoice    = onStartVoiceWithPermission,
-            onEndVoice      = viewModel::endVoiceRecording,
-            onCashOut       = viewModel::requestPayout,
-            onOnboard       = viewModel::startStripeOnboarding,
-            accountName     = accountName,
-            accountEmail    = accountEmail,
+            uiState             = uiState,
+            sessions            = sessions,
+            sessionMessages     = sessionMessages,
+            activeSessionId     = activeSessionId,
+            onSendMessage       = viewModel::sendMessage,
+            onCancelSearch      = viewModel::cancelSearch,
+            onNewChat           = viewModel::newSession,
+            onLoadSession       = viewModel::loadSession,
+            onDeleteSession     = viewModel::deleteSession,
+            onSignOut           = onSignOut,
+            onStartVoice        = onStartVoiceWithPermission,
+            onStartAutoVoice    = onStartAutoVoiceWithPermission,
+            onEndVoice          = viewModel::endVoiceRecording,
+            onCashOut           = viewModel::requestPayout,
+            onOnboard           = viewModel::startStripeOnboarding,
+            accountName         = accountName,
+            accountEmail        = accountEmail,
         )
 
         val active = uiState as? CopilotUiState.Active
@@ -97,13 +116,16 @@ fun CopilotRoute(
                       scaleOut(tween(260, easing = FastOutSlowInEasing), targetScale = 0.95f),
         ) {
             VoiceCallOverlay(
-                voiceAmplitude = active?.voiceAmplitude ?: 0f,
-                listeningState = active?.voiceListeningState ?: VoiceListeningState.Idle,
-                onSend         = viewModel::endVoiceRecording,
-                onHold         = viewModel::holdVoiceMode,
-                onResume       = viewModel::resumeVoiceMode,
-                onEnd          = viewModel::dismissVoiceOverlay,
-                modifier       = Modifier.fillMaxSize(),
+                voiceAmplitude  = active?.voiceAmplitude ?: 0f,
+                listeningState  = active?.voiceListeningState ?: VoiceListeningState.Idle,
+                isAutoVad       = active?.isAutoVadActive == true,
+                proactiveLabel  = active?.proactiveLabel ?: "",
+                onSend          = viewModel::endVoiceRecording,
+                onHold          = viewModel::holdVoiceMode,
+                onResume        = viewModel::resumeVoiceMode,
+                onEnd           = viewModel::dismissVoiceOverlay,
+                onSwitchToLive  = onStartAutoVoiceWithPermission,
+                modifier        = Modifier.fillMaxSize(),
             )
         }
     }

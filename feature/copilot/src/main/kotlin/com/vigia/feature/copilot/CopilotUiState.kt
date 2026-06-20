@@ -3,6 +3,7 @@ package com.vigia.feature.copilot
 import com.vigia.core.model.DevicePresenceState
 import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.LocationSnapshot
+import com.vigia.core.model.RouteAheadHazard
 import com.vigia.core.model.RriScore
 import com.vigia.core.network.search.SearchEvent
 
@@ -29,6 +30,9 @@ sealed interface CopilotUiState {
         val isVoiceOverlayVisible: Boolean = false,
         val voiceAmplitude: Float = 0f,        // 0..1 normalised RMS from mic
         val voiceListeningState: VoiceListeningState = VoiceListeningState.Idle,
+        val isAutoVadActive: Boolean = false,   // true = Gemini Live-style hands-free mode
+        val proactiveLabel: String = "",        // shown briefly when proactive announcement fires
+        val routeAheadHazards: List<RouteAheadHazard> = emptyList(),
     ) : CopilotUiState
 
     data class Error(val message: String) : CopilotUiState
@@ -44,11 +48,13 @@ enum class OrbState {
 }
 
 enum class VoiceListeningState {
-    Idle,        // overlay not active
-    Listening,   // mic open, recording
-    Paused,      // mic muted by user — overlay stays open
-    Processing,  // STT + search in flight
-    Speaking,    // Sarvam TTS playing back the answer
+    Idle,          // overlay not active
+    Listening,     // manual mode: mic open, user taps to stop
+    AutoListening, // Gemini Live mode: VAD active, auto-endpoints utterances
+    Paused,        // mic muted by user — overlay stays open
+    Processing,    // STT + search in flight
+    Speaking,      // Sarvam TTS playing back the answer
+    BargeIn,       // user interrupted AI mid-response; transitioning back to AutoListening
 }
 
 // ── Wallet UI state ───────────────────────────────────────────────────────────

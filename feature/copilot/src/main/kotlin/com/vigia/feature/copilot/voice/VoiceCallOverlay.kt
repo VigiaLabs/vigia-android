@@ -1,6 +1,7 @@
 package com.vigia.feature.copilot.voice
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -68,22 +69,16 @@ import kotlin.math.sin
 /**
  * Live conversational AI overlay — Gemini Live–style full-screen voice session.
  *
- * Flow:
- *   [Listening] → user speaks, aurora reacts to real mic amplitude
- *   → tap orb → [Processing] (STT + AI search)
- *   → Sarvam TTS speaks answer inside the aurora → [Speaking]
- *   → mic auto-reopens → [Listening] again (conversational loop)
- *   → tap X to end the session entirely
+ * Two modes:
+ *   Manual  ([Listening]):    user taps orb to end utterance (legacy)
+ *   Auto    ([AutoListening]): VAD auto-detects utterance end — no tap needed
  *
- * The centre orb is the primary interaction: it shows a "Tap to send" ring when
- * in [VoiceListeningState.Listening] and becomes non-interactive in other states.
- * The End button is the only other control — no Hold/Pause; drivers need simplicity.
+ * AutoListening flow:
+ *   User speaks → VAD detects onset → orb reacts → VAD detects silence →
+ *   auto-sends → [Processing] → Sarvam TTS → [Speaking] → barge-in or auto-reopen
  *
- * Aurora amplitude mapping:
- *   Listening  → 0.30 + voiceAmplitude × 0.70  (real mic RMS)
- *   Processing → 0.38  (dim breathe — thinking)
- *   Speaking   → 0.60  (mid glow — AI speaking)
- *   Idle       → 0.18  (very dim fallback)
+ * The centre orb is tappable ONLY in manual Listening mode.
+ * In AutoListening it is purely visual — the user just speaks.
  *
  * Render-thread guarantee: blob phases and amplitude are read INSIDE Canvas/graphicsLayer
  * lambdas — animating on draw phase only, zero recomposition cost.
@@ -92,18 +87,23 @@ import kotlin.math.sin
 internal fun VoiceCallOverlay(
     voiceAmplitude: Float,
     listeningState: VoiceListeningState,
-    onSend: () -> Unit,      // tap orb while Listening → stop recording + transcribe
-    onHold: () -> Unit,      // mute mic, keep overlay open
-    onResume: () -> Unit,    // unmute mic after hold
-    onEnd: () -> Unit,       // tap X → dismiss entire voice session
+    isAutoVad: Boolean = false,
+    proactiveLabel: String = "",
+    onSend: () -> Unit,              // tap orb while manual Listening → stop recording + transcribe
+    onHold: () -> Unit,              // mute mic, keep overlay open
+    onResume: () -> Unit,            // unmute mic after hold
+    onEnd: () -> Unit,               // tap X → dismiss entire voice session
+    onSwitchToLive: () -> Unit = {}, // toggle to Gemini Live-style auto-VAD mode
     modifier: Modifier = Modifier,
 ) {
     val targetActivity = when (listeningState) {
-        VoiceListeningState.Listening  -> 0.38f + voiceAmplitude * 0.62f
-        VoiceListeningState.Processing -> 0.52f
-        VoiceListeningState.Speaking   -> 0.42f + voiceAmplitude * 0.58f
-        VoiceListeningState.Paused     -> 0.18f
-        VoiceListeningState.Idle       -> 0.28f
+        VoiceListeningState.Listening,
+        VoiceListeningState.AutoListening -> 0.38f + voiceAmplitude * 0.62f
+        VoiceListeningState.BargeIn       -> 0.70f + voiceAmplitude * 0.30f
+        VoiceListeningState.Processing    -> 0.52f
+        VoiceListeningState.Speaking      -> 0.42f + voiceAmplitude * 0.58f
+        VoiceListeningState.Paused        -> 0.18f
+        VoiceListeningState.Idle          -> 0.28f
     }
     val activity = animateFloatAsState(
         targetValue   = targetActivity,
@@ -129,7 +129,7 @@ internal fun VoiceCallOverlay(
             Spacer(Modifier.height(40.dp))
 
             Text(
-                text  = "VIGIA Voice",
+                text  = if (isAutoVad) "VIGIA Live" else "VIGIA Voice",
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
             )
@@ -143,14 +143,32 @@ internal fun VoiceCallOverlay(
             ) { state ->
                 Text(
                     text = when (state) {
-                        VoiceListeningState.Listening  -> "Listening…"
-                        VoiceListeningState.Processing -> "Processing…"
-                        VoiceListeningState.Speaking   -> "Speaking…"
-                        VoiceListeningState.Paused     -> "On hold"
-                        VoiceListeningState.Idle       -> ""
+                        VoiceListeningState.Listening      -> "Listening…"
+                        VoiceListeningState.AutoListening  -> "Ready — just speak"
+                        VoiceListeningState.BargeIn        -> "Got it…"
+                        VoiceListeningState.Processing     -> "Processing…"
+                        VoiceListeningState.Speaking       -> "Speaking…"
+                        VoiceListeningState.Paused         -> "On hold"
+                        VoiceListeningState.Idle           -> ""
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.65f),
+                )
+            }
+
+            // Proactive route alert banner — fades in when route-ahead fires a warning.
+            AnimatedVisibility(
+                visible = proactiveLabel.isNotEmpty(),
+                enter   = fadeIn(tween(300)),
+                exit    = fadeOut(tween(400)),
+            ) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text      = proactiveLabel,
+                    style     = MaterialTheme.typography.labelSmall,
+                    color     = Color(0xFFFFA726).copy(alpha = 0.90f),
+                    textAlign = TextAlign.Center,
+                    modifier  = Modifier.padding(horizontal = 32.dp),
                 )
             }
 
@@ -174,11 +192,13 @@ internal fun VoiceCallOverlay(
             ) { state ->
                 Text(
                     text      = when (state) {
-                        VoiceListeningState.Listening  -> "Listening…"
-                        VoiceListeningState.Processing -> "Thinking…"
-                        VoiceListeningState.Speaking   -> "Press × to stop"
-                        VoiceListeningState.Paused     -> "Tap mic to resume"
-                        VoiceListeningState.Idle       -> ""
+                        VoiceListeningState.Listening      -> "Tap orb when done"
+                        VoiceListeningState.AutoListening  -> "Hands-free — silence stops recording"
+                        VoiceListeningState.BargeIn        -> "Interrupted — listening…"
+                        VoiceListeningState.Processing     -> "Thinking…"
+                        VoiceListeningState.Speaking       -> "Speak to interrupt"
+                        VoiceListeningState.Paused         -> "Tap mic to resume"
+                        VoiceListeningState.Idle           -> ""
                     },
                     style     = MaterialTheme.typography.labelMedium,
                     color     = Color.White.copy(alpha = 0.45f),
@@ -186,11 +206,42 @@ internal fun VoiceCallOverlay(
                 )
             }
 
+            // ── Live mode toggle chip (manual mode only) ──────────────────────
+            AnimatedVisibility(
+                visible = !isAutoVad &&
+                    listeningState == VoiceListeningState.Listening,
+                enter = fadeIn(tween(300)),
+                exit  = fadeOut(tween(200)),
+            ) {
+                val liveInteraction = remember { MutableInteractionSource() }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .pressScale(liveInteraction, pressedScale = 0.92f)
+                        .clip(CircleShape)
+                        .background(Color(0xFF3C2F6B).copy(alpha = 0.72f))
+                        .clickable(
+                            interactionSource = liveInteraction,
+                            indication = null,
+                            onClick = onSwitchToLive,
+                        )
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text  = "Switch to Live mode",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFB39DDB),
+                    )
+                }
+            }
+
             Spacer(Modifier.weight(1f))
 
             // ── Hold + End row ─────────────────────────────────────────────────
             val isPaused = listeningState == VoiceListeningState.Paused
             val canHold  = listeningState == VoiceListeningState.Listening ||
+                           listeningState == VoiceListeningState.AutoListening ||
                            listeningState == VoiceListeningState.Speaking
 
             Row(
@@ -274,6 +325,7 @@ private fun OrbSendButton(
     onSend: () -> Unit,
     size: Dp,
 ) {
+    // Only manual Listening mode shows the tap-to-send affordance.
     val isListening = listeningState == VoiceListeningState.Listening
 
     // Simulated oscillators keep the orb alive when mic amplitude is low.
@@ -347,7 +399,9 @@ private fun OrbSendButton(
                 },
         ) {
             val orbState = when (listeningState) {
-                VoiceListeningState.Listening  -> OrbState.Listening
+                VoiceListeningState.Listening,
+                VoiceListeningState.AutoListening,
+                VoiceListeningState.BargeIn    -> OrbState.Listening
                 VoiceListeningState.Processing -> OrbState.Searching
                 VoiceListeningState.Speaking   -> OrbState.Active
                 VoiceListeningState.Paused,
