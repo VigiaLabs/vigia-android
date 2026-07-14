@@ -38,13 +38,14 @@ class SarvamTtsClientImpl @Inject constructor(
         text: String,
         languageCode: String,
         speaker: String,
+        pace: Double,
     ): ByteArray = withContext(Dispatchers.IO) {
         val bodyJson = JSONObject().apply {
             put("text", text)
             put("target_language_code", languageCode)
             put("speaker", speaker)
             put("pitch", 0)
-            put("pace", 1.0)
+            put("pace", pace)
         }.toString()
 
         val proxyUrl = baseUrl.trimEnd('/') + "/sarvam-proxy/tts"

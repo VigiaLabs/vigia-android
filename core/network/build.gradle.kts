@@ -36,4 +36,9 @@ dependencies {
     implementation(libs.androidx.datastore.prefs)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
+    // Real org.json implementation — the Android SDK stub throws "not mocked" in JVM unit tests
+    testImplementation(libs.orgjson)
 }

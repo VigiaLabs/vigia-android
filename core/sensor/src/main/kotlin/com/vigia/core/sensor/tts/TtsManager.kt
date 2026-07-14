@@ -80,6 +80,7 @@ class TtsManager @Inject constructor(
     private data class SpeechItem(
         val text: String,
         val languageCode: String,
+        val pace: Double,
         val onDone: () -> Unit,
     )
 
@@ -91,7 +92,7 @@ class TtsManager @Inject constructor(
         scope.launch {
             for (item in speechQueue) {
                 try {
-                    val wav = sarvamTtsClient.synthesize(item.text, item.languageCode)
+                    val wav = sarvamTtsClient.synthesize(item.text, item.languageCode, pace = item.pace)
                     playWavAndAwait(wav)
                 } catch (e: Exception) {
                     Log.w(TAG, "Sarvam TTS failed, falling back to Android TTS: ${e.message}")
@@ -125,7 +126,7 @@ class TtsManager @Inject constructor(
         onDone: () -> Unit = {},
     ) {
         if (text.isBlank()) { onDone(); return }
-        speechQueue.trySend(SpeechItem(text, languageCode, onDone))
+        speechQueue.trySend(SpeechItem(text, languageCode, profileSpeechRate.toDouble(), onDone))
     }
 
     /**

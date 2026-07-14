@@ -113,7 +113,7 @@ class OkHttpSseSearchClient @Inject constructor(
 
     // ── SSE parsing ───────────────────────────────────────────────────────────
 
-    private fun parseEvent(type: String, data: String): SearchEvent? =
+    internal fun parseEvent(type: String, data: String): SearchEvent? =
         try {
             when (type) {
                 "step" -> {
@@ -169,7 +169,7 @@ class OkHttpSseSearchClient @Inject constructor(
 
     // ── Request serialisation ─────────────────────────────────────────────────
 
-    private fun buildRequestBody(ctx: VigiaSearchContext): String {
+    internal fun buildRequestBody(ctx: VigiaSearchContext): String {
         val contextObj = JSONObject().apply {
             put("locationLat",    ctx.location.latitudeDeg)
             put("locationLng",    ctx.location.longitudeDeg)

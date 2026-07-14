@@ -15,5 +15,6 @@ interface SarvamTtsClient {
         text: String,
         languageCode: String = "en-IN",
         speaker: String = "meera",
+        pace: Double = 1.0,
     ): ByteArray
 }

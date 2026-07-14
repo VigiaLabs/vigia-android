@@ -46,8 +46,8 @@ internal object GattConstants {
 
     /** CONTROL_CHAR opcodes (phone→Pi stream-mode commands). Matches kRequest* in ble_gatt_node.cpp. */
     object Control {
-        const val REQUEST_256D: Byte = 0x00
-        const val REQUEST_512D: Byte = 0x01
+        const val REQUEST_256D: Byte = 0x10
+        const val REQUEST_512D: Byte = 0x11
         const val REQUEST_RRI_ONLY: Byte = 0xFF.toByte()
         // M11: profile-scaled TTC threshold push. Payload: [0xA0 | ttc_f32_le(4)] = 5 bytes.
         const val SET_TTC_THRESHOLD: Byte = 0xA0.toByte()
