@@ -121,6 +121,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -1501,11 +1503,18 @@ private fun SourceCard(
     source: SearchEvent.Source,
     modifier: Modifier = Modifier,
 ) {
+    val uriHandler = LocalUriHandler.current
+    val canOpenSource = source.url.startsWith("https://") || source.url.startsWith("http://")
+
     Surface(
         color           = MaterialTheme.vigiaColors.glassSurface,
         shape           = MaterialTheme.shapes.large,
         shadowElevation = 1.dp,
-        modifier        = modifier.fillMaxWidth(),
+        modifier        = modifier
+            .fillMaxWidth()
+            .clickable(enabled = canOpenSource, role = Role.Button) {
+                uriHandler.openUri(source.url)
+            },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
