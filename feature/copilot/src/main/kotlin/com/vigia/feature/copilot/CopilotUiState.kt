@@ -24,6 +24,8 @@ sealed interface CopilotUiState {
         val totalLatencyMs: Long = 0L,
         val searchAnswer: String = "",
         val searchSources: List<SearchEvent.Source> = emptyList(),
+        val evidenceClaims: List<SearchEvent.EvidenceClaim> = emptyList(),
+        val offlineEvidence: SearchEvent.OfflineEvidence? = null,
         val spatialMarkers: List<SearchEvent.SpatialMarker> = emptyList(),
         val isSearchStreaming: Boolean = false,
         // Voice mode state

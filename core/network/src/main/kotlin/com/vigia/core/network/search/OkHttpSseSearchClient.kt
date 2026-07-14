@@ -135,10 +135,48 @@ class OkHttpSseSearchClient @Inject constructor(
     private fun parseMetadata(obj: JSONObject): SearchEvent.Metadata =
         SearchEvent.Metadata(
             sources               = obj.optJSONArray("sources")?.let(::parseSourceArray) ?: emptyList(),
+            claims                = obj.optJSONArray("claims")?.let(::parseClaimArray) ?: emptyList(),
+            offline               = obj.optJSONObject("offline")?.let(::parseOfflineEvidence),
             spatialMarkers        = obj.optJSONArray("spatialMarkers")?.let(::parseMarkerArray) ?: emptyList(),
             totalLatencyMs        = obj.optLong("totalLatencyMs"),
             contradictionVerified = obj.optBoolean("contradictionVerified"),
         )
+
+    private fun parseClaimArray(arr: JSONArray): List<SearchEvent.EvidenceClaim> =
+        (0 until arr.length()).map { index ->
+            val obj = arr.getJSONObject(index)
+            SearchEvent.EvidenceClaim(
+                category        = obj.optString("category"),
+                status          = obj.optString("status"),
+                subject         = obj.optString("subject"),
+                predicate       = obj.optString("predicate"),
+                value           = obj.opt("value")?.takeUnless { it == JSONObject.NULL }?.toString(),
+                unit            = obj.optNullableString("unit"),
+                role            = obj.optNullableString("role"),
+                financialType   = obj.optNullableString("financialType"),
+                maintenanceType = obj.optNullableString("maintenanceType"),
+                dateKind        = obj.optNullableString("dateKind"),
+                observedAt      = obj.optNullableString("observedAt"),
+                sourceId        = obj.optString("sourceId"),
+                sourceQuote     = obj.optString("sourceQuote"),
+                sourceLocator   = obj.optNullableString("sourceLocator"),
+                retrievedAt     = obj.optString("retrievedAt"),
+            )
+        }
+
+    private fun parseOfflineEvidence(obj: JSONObject) = SearchEvent.OfflineEvidence(
+        mode          = obj.optString("mode"),
+        lastSyncAt    = obj.optLongOrNull("lastSyncAt"),
+        cacheAgeHours = obj.optLongOrNull("cacheAgeHours"),
+        packVersion   = obj.optNullableString("packVersion"),
+        stale         = obj.optBoolean("stale"),
+    )
+
+    private fun JSONObject.optNullableString(key: String): String? =
+        if (has(key) && !isNull(key)) optString(key) else null
+
+    private fun JSONObject.optLongOrNull(key: String): Long? =
+        if (has(key) && !isNull(key)) optLong(key) else null
 
     private fun parseSourceArray(arr: JSONArray): List<SearchEvent.Source> =
         (0 until arr.length())

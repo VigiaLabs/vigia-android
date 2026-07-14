@@ -716,6 +716,8 @@ class CopilotViewModel @Inject constructor(
                     completedSteps    = emptyList(),
                     totalLatencyMs    = 0L,
                     searchSources     = emptyList(),
+                    evidenceClaims    = emptyList(),
+                    offlineEvidence   = null,
                     spatialMarkers    = emptyList(),
                 )
             }
@@ -744,6 +746,8 @@ class CopilotViewModel @Inject constructor(
                             updateActive {
                                 copy(
                                     searchSources  = event.sources,
+                                    evidenceClaims = event.claims,
+                                    offlineEvidence = event.offline,
                                     spatialMarkers = event.spatialMarkers,
                                     totalLatencyMs = event.totalLatencyMs,
                                 )

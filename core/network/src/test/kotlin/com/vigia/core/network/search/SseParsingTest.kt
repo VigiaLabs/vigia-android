@@ -181,6 +181,16 @@ class SseParsingTest {
           "sources": [
             {"id":"hz-001","label":"Verified hazard","trustLevel":"HIGH","url":""}
           ],
+          "claims": [
+            {
+              "category":"financial","status":"verified","subject":"P161305",
+              "predicate":"project-financing","value":750000000,"unit":"USD",
+              "financialType":"project-financing","sourceId":"worldbank-P161305",
+              "sourceQuote":"750,000,000","sourceLocator":"projects[P161305].totalamt",
+              "retrievedAt":"2026-07-14T19:53:22.234Z"
+            }
+          ],
+          "offline": {"mode":"offline","lastSyncAt":1750000000000,"cacheAgeHours":2,"packVersion":"2026.07.15","stale":false},
           "spatialMarkers": [
             {"id":"m1","title":"Pothole","lat":12.97,"lng":77.59,"type":"POTHOLE","severity":"HIGH","summary":"Large pothole"}
           ],
@@ -190,6 +200,10 @@ class SseParsingTest {
         val event = client.parseEvent("metadata", json) as SearchEvent.Metadata
 
         assertEquals(1,       event.sources.size)
+        assertEquals(1,       event.claims.size)
+        assertEquals("project-financing", event.claims[0].financialType)
+        assertEquals("offline", event.offline?.mode)
+        assertEquals("2026.07.15", event.offline?.packVersion)
         assertEquals("hz-001",event.sources[0].id)
         assertEquals("HIGH",  event.sources[0].trustLevel)
         assertEquals(1,       event.spatialMarkers.size)

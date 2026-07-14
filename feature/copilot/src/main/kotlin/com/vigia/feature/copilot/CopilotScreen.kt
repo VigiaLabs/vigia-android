@@ -1379,6 +1379,8 @@ private fun AnswersPane(
                 AnswerCard(
                     answer      = state.searchAnswer,
                     sources     = state.searchSources,
+                    claims      = state.evidenceClaims,
+                    offline     = state.offlineEvidence,
                     steps       = state.completedSteps,
                     latencyMs   = state.totalLatencyMs,
                     isStreaming = true,
@@ -2605,6 +2607,8 @@ private fun EmptyState(
 private fun AnswerCard(
     answer: String,
     sources: List<SearchEvent.Source>,
+    claims: List<SearchEvent.EvidenceClaim> = emptyList(),
+    offline: SearchEvent.OfflineEvidence? = null,
     steps: List<String>,
     latencyMs: Long,
     isStreaming: Boolean,
@@ -2671,6 +2675,21 @@ private fun AnswerCard(
                 style = AnswerBodyStyle,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+
+            if (claims.isNotEmpty() || offline != null) {
+                Spacer(Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(claims.map { it.status }.distinct(), key = { it }) { status ->
+                        SourceChip(label = status.replaceFirstChar { it.uppercase() })
+                    }
+                    if (offline?.mode == "offline") {
+                        item(key = "cached-offline") { SourceChip(label = "Cached offline") }
+                    }
+                    if (offline?.stale == true) {
+                        item(key = "stale") { SourceChip(label = "Stale data") }
+                    }
+                }
+            }
 
             if (isPartial) {
                 Spacer(Modifier.height(8.dp))

@@ -23,6 +23,8 @@ sealed interface SearchEvent {
     /** Final metadata delivered after all TextDelta events. */
     data class Metadata(
         val sources: List<Source>,
+        val claims: List<EvidenceClaim> = emptyList(),
+        val offline: OfflineEvidence? = null,
         val spatialMarkers: List<SpatialMarker>,
         val totalLatencyMs: Long,
         val contradictionVerified: Boolean,
@@ -38,6 +40,32 @@ sealed interface SearchEvent {
         val label: String,
         val trustLevel: String,
         val url: String,
+    )
+
+    data class EvidenceClaim(
+        val category: String,
+        val status: String,
+        val subject: String,
+        val predicate: String,
+        val value: String?,
+        val unit: String?,
+        val role: String?,
+        val financialType: String?,
+        val maintenanceType: String?,
+        val dateKind: String?,
+        val observedAt: String?,
+        val sourceId: String,
+        val sourceQuote: String,
+        val sourceLocator: String?,
+        val retrievedAt: String,
+    )
+
+    data class OfflineEvidence(
+        val mode: String,
+        val lastSyncAt: Long?,
+        val cacheAgeHours: Long?,
+        val packVersion: String?,
+        val stale: Boolean,
     )
 
     data class SpatialMarker(
