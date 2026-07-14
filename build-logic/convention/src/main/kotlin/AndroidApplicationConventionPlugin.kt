@@ -38,6 +38,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     create("demo") {
                         dimension = "env"
                         applicationIdSuffix = ".demo"
+                        buildConfigField("boolean", "DEMO_BYPASS_AUTH", "true")
                         buildConfigField("String", "STRIPE_PUBLISHABLE_KEY",
                             "\"${secret("STRIPE_PUBLISHABLE_KEY", "pk_test_REPLACE_ME")}\"")
                         buildConfigField("String", "MQTT_BROKER_URI",
@@ -54,6 +55,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     //         in CI runners, so env vars are the sole source.
                     create("prod") {
                         dimension = "env"
+                        buildConfigField("boolean", "DEMO_BYPASS_AUTH", "false")
                         buildConfigField("String", "STRIPE_PUBLISHABLE_KEY",
                             "\"${secret("STRIPE_PUBLISHABLE_KEY")}\"")
                         buildConfigField("String", "MQTT_BROKER_URI",

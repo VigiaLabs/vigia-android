@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            AppRoot()
+            AppRoot(bypassSignIn = BuildConfig.DEMO_BYPASS_AUTH)
         }
     }
 }

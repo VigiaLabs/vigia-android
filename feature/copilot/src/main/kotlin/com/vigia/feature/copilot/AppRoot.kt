@@ -26,13 +26,23 @@ import com.vigia.feature.pairing.PairingScreen
  *   SignedIn + paired     → [CopilotRoute]
  */
 @Composable
-fun AppRoot() {
+fun AppRoot(bypassSignIn: Boolean = false) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val authState by authViewModel.authState.collectAsStateWithLifecycle()
     val ui        by authViewModel.ui.collectAsStateWithLifecycle()
 
     val appRootViewModel: AppRootViewModel = hiltViewModel()
     val isPaired by appRootViewModel.isPaired.collectAsStateWithLifecycle()
+
+    if (bypassSignIn) {
+        AuthenticatedApp(
+            isPaired = isPaired,
+            accountName = "RoadWatch Demo",
+            accountEmail = "Demo build · sign-in bypassed",
+            onSignOut = {},
+        )
+        return
+    }
 
     when (val state = authState) {
         AuthState.Loading -> SplashGate()
@@ -52,18 +62,32 @@ fun AppRoot() {
         )
 
         is AuthState.SignedIn -> {
-            when {
-                isPaired == null -> SplashGate()  // Still loading pairing state from DataStore.
-                isPaired == false -> PairingScreen(
-                    onPairingComplete = appRootViewModel::onPairingComplete,
-                )
-                else -> CopilotRoute(
-                    onSignOut    = authViewModel::signOut,
-                    accountName  = state.user.displayName,
-                    accountEmail = state.user.email,
-                )
-            }
+            AuthenticatedApp(
+                isPaired = isPaired,
+                accountName = state.user.displayName,
+                accountEmail = state.user.email,
+                onSignOut = authViewModel::signOut,
+            )
         }
+    }
+}
+
+@Composable
+private fun AuthenticatedApp(
+    isPaired: Boolean?,
+    accountName: String?,
+    accountEmail: String,
+    onSignOut: () -> Unit,
+) {
+    val appRootViewModel: AppRootViewModel = hiltViewModel()
+    when {
+        isPaired == null -> SplashGate()
+        isPaired == false -> PairingScreen(onPairingComplete = appRootViewModel::onPairingComplete)
+        else -> CopilotRoute(
+            onSignOut = onSignOut,
+            accountName = accountName,
+            accountEmail = accountEmail,
+        )
     }
 }
 
