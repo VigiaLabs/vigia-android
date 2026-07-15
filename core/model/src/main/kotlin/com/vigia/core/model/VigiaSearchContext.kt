@@ -7,6 +7,7 @@ data class VigiaSearchContext(
     val velocityMs: Float,
     val rriScore: RriScore,
     val spatialLatentVector: SpatialLatentVector,
+    val responseLanguage: String = "en-IN",
     val conversationHistory: List<ConversationTurn> = emptyList(),
     val routeAheadHazards: List<RouteAheadHazard> = emptyList(),
 )

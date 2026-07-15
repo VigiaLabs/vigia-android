@@ -9,8 +9,8 @@ android {
     namespace = "com.vigia.copilot"
 
     defaultConfig {
-        versionCode = 5
-        versionName = "2.0-finale-r5"
+        versionCode = 6
+        versionName = "2.0-finale-r6"
     }
 
     buildTypes {

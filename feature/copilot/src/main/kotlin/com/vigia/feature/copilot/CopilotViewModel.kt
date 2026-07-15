@@ -60,7 +60,7 @@ import javax.inject.Inject
 internal fun isVoiceSessionStopCommand(transcript: String): Boolean {
     val normalized = transcript
         .lowercase(Locale.ROOT)
-        .replace(Regex("[^a-z0-9' ]"), " ")
+        .replace(Regex("[^\\p{L}\\p{N}' ]"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
     val exactCommands = setOf(
@@ -78,11 +78,62 @@ internal fun isVoiceSessionStopCommand(transcript: String): Boolean {
         "that is all",
         "goodbye",
         "bye",
+        "रुको",
+        "बस",
+        "बंद करो",
+        "बोलना बंद करो",
+        "धन्यवाद",
+        "ठीक है धन्यवाद",
     )
     return normalized in exactCommands ||
         normalized.matches(Regex("^(please |ok |okay )?stop( please)?$")) ||
         normalized.matches(Regex("^(ok |okay )?(thank you|thanks)( very much)?( vigia)?$"))
 }
+
+internal fun resolveTurnLanguageCode(
+    text: String,
+    detectedLanguageCode: String?,
+    previousLanguageCode: String = "en-IN",
+): String {
+    val detected = detectedLanguageCode
+        ?.replace('_', '-')
+        ?.takeIf { it.matches(Regex("^[a-z]{2,3}-[A-Z]{2}$", RegexOption.IGNORE_CASE)) }
+    if (detected != null) {
+        val parts = detected.split('-')
+        return "${parts[0].lowercase(Locale.ROOT)}-${parts[1].uppercase(Locale.ROOT)}"
+    }
+
+    return when {
+        Regex("[\\u0900-\\u097F]").containsMatchIn(text) -> "hi-IN"
+        Regex("[\\u0980-\\u09FF]").containsMatchIn(text) -> "bn-IN"
+        Regex("[\\u0B80-\\u0BFF]").containsMatchIn(text) -> "ta-IN"
+        Regex("[\\u0C00-\\u0C7F]").containsMatchIn(text) -> "te-IN"
+        Regex("[\\u0C80-\\u0CFF]").containsMatchIn(text) -> "kn-IN"
+        Regex("[\\u0D00-\\u0D7F]").containsMatchIn(text) -> "ml-IN"
+        Regex("[\\u0A80-\\u0AFF]").containsMatchIn(text) -> "gu-IN"
+        Regex("[\\u0A00-\\u0A7F]").containsMatchIn(text) -> "pa-IN"
+        Regex("[\\u0B00-\\u0B7F]").containsMatchIn(text) -> "od-IN"
+        Regex("[\\u0600-\\u06FF]").containsMatchIn(text) -> "ur-IN"
+        Regex("\\b(aap|kya|hai|hain|mujhe|sadak|rasta|batao|bataiye|nahi|kaise)\\b", RegexOption.IGNORE_CASE)
+            .containsMatchIn(text) -> "hi-IN"
+        Regex("[A-Za-z]{2,}").findAll(text).count() >= 2 -> "en-IN"
+        else -> previousLanguageCode
+    }
+}
+
+internal fun localizedVoiceProgress(step: String, languageCode: String): String? {
+    val progress = naturalVoiceProgress(step) ?: return null
+    return when (languageCode.substringBefore('-')) {
+        "hi" -> "एक क्षण रुकिए, मैं आधिकारिक सड़क रिकॉर्ड देख रहा हूँ।"
+        else -> progress
+    }
+}
+
+internal fun clarificationPrompt(languageCode: String): String =
+    when (languageCode.substringBefore('-')) {
+        "hi" -> "मैं आपकी बात ठीक से नहीं सुन पाया। कृपया फिर से कहिए।"
+        else -> "I didn't catch that. Could you say it again?"
+    }
 
 internal fun naturalVoiceProgress(step: String): String? {
     val normalized = step.lowercase(Locale.ROOT)
@@ -100,7 +151,7 @@ internal fun isLikelyPlaybackEcho(transcript: String, spokenText: String?): Bool
     if (spokenText.isNullOrBlank() || isVoiceSessionStopCommand(transcript)) return false
     fun normalize(value: String) = value
         .lowercase(Locale.ROOT)
-        .replace(Regex("[^a-z0-9 ]"), " ")
+        .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
     val heard = normalize(transcript)
@@ -167,6 +218,7 @@ class CopilotViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), emptyList())
 
     private var searchJob: Job? = null
+    private var lastTurnLanguageCode: String = "en-IN"
 
     init {
         _uiState.value = CopilotUiState.Active(
@@ -192,7 +244,9 @@ class CopilotViewModel @Inject constructor(
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String) = sendMessage(text, null)
+
+    private fun sendMessage(text: String, detectedLanguageCode: String?) {
         if (text.isBlank()) return
         val baseContext = _latestContext.value
         if (baseContext == null) {
@@ -204,6 +258,12 @@ class CopilotViewModel @Inject constructor(
 
         viewModelScope.launch {
             val trimmed = text.trim()
+            val responseLanguage = resolveTurnLanguageCode(
+                text = trimmed,
+                detectedLanguageCode = detectedLanguageCode,
+                previousLanguageCode = lastTurnLanguageCode,
+            )
+            lastTurnLanguageCode = responseLanguage
             conversationContextManager.addUserTurn(trimmed)
             val sessionId = getOrCreateSessionId(trimmed)
 
@@ -221,6 +281,7 @@ class CopilotViewModel @Inject constructor(
             val context = baseContext.copy(
                 queryText            = trimmed,
                 timestampMs          = System.currentTimeMillis(),
+                responseLanguage     = responseLanguage,
                 conversationHistory  = conversationContextManager.history().dropLast(1), // exclude current turn
                 routeAheadHazards    = routeAheadMonitor.routeAheadHazards.value,
             )
@@ -343,10 +404,11 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
+                val languageCode = sarvamSttClient.lastDetectedLanguageCode.value
                 if (isVoiceSessionStopCommand(transcript)) {
                     dismissVoiceOverlay()
                 } else if (transcript.isNotBlank() && _latestContext.value != null) {
-                    sendMessage(transcript)
+                    sendMessage(transcript, languageCode)
                 } else {
                     reopenMic()
                 }
@@ -451,13 +513,14 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
+                val languageCode = sarvamSttClient.lastDetectedLanguageCode.value
                 if (isVoiceSessionStopCommand(transcript)) {
                     dismissVoiceOverlay()
                 } else if (fromBargeIn && isLikelyPlaybackEcho(transcript, ttsManager.lastSpokenText.value)) {
                     Log.d(TAG, "Discarding probable playback echo")
                     reopenCurrentVoiceMic()
                 } else if (transcript.isNotBlank() && _latestContext.value != null) {
-                    sendMessage(transcript)
+                    sendMessage(transcript, languageCode)
                 } else {
                     clarifyAndReopenMic()
                 }
@@ -476,7 +539,10 @@ class CopilotViewModel @Inject constructor(
                 voiceAmplitude = 0f,
             )
         }
-        ttsManager.speakSarvam("I didn't catch that. Could you say it again?") {
+        ttsManager.speakSarvam(
+            clarificationPrompt(lastTurnLanguageCode),
+            languageCode = lastTurnLanguageCode,
+        ) {
             viewModelScope.launch { reopenCurrentVoiceMic() }
         }
     }
@@ -835,9 +901,9 @@ class CopilotViewModel @Inject constructor(
                                 )
                             }
                             if (isVoice && !hasSpokenProgress) {
-                                naturalVoiceProgress(event.message)?.let { progress ->
+                                localizedVoiceProgress(event.message, lastTurnLanguageCode)?.let { progress ->
                                     hasSpokenProgress = true
-                                    ttsManager.speakSarvam(progress)
+                                    ttsManager.speakSarvam(progress, languageCode = lastTurnLanguageCode)
                                 }
                             }
                         }
@@ -902,7 +968,7 @@ class CopilotViewModel @Inject constructor(
                                 observeBargeIn()
                                 if (wasVoiceActive) bargeInController.startMonitoring()
 
-                                ttsManager.speakSarvam(answer) {
+                                ttsManager.speakSarvam(answer, languageCode = lastTurnLanguageCode) {
                                     viewModelScope.launch {
                                         bargeInController.stopMonitoring()
                                         val currentVoiceState = (_uiState.value as? CopilotUiState.Active)

@@ -145,6 +145,14 @@ class SseParsingTest {
         assertEquals("should I detour then?", body.getString("query"))
     }
 
+    @Test
+    fun `latest turn response language is sent to search service`() {
+        val body = JSONObject(client.buildRequestBody(makeContext("इस सड़क की जिम्मेदारी किसकी है?").copy(
+            responseLanguage = "hi-IN",
+        )))
+        assertEquals("hi-IN", body.getString("response_language"))
+    }
+
     // ── 2. SSE event parsing ──────────────────────────────────────────────────
 
     @Test

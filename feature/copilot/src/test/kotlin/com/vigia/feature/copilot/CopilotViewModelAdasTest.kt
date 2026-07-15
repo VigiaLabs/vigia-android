@@ -71,6 +71,26 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CopilotViewModelAdasTest {
 
+    @Test
+    fun `detected Hindi controls the current reply language`() {
+        assertEquals("hi-IN", resolveTurnLanguageCode("NH 44 कौन संभालता है?", "hi-IN"))
+    }
+
+    @Test
+    fun `typed Devanagari selects Hindi without STT metadata`() {
+        assertEquals("hi-IN", resolveTurnLanguageCode("यह सड़क किसकी जिम्मेदारी है?", null))
+    }
+
+    @Test
+    fun `latest English turn switches replies back to English`() {
+        assertEquals("en-IN", resolveTurnLanguageCode("Who maintains this road?", null, "hi-IN"))
+    }
+
+    @Test
+    fun `short ambiguous follow-up preserves prior language`() {
+        assertEquals("hi-IN", resolveTurnLanguageCode("NH 44?", null, "hi-IN"))
+    }
+
     // UnconfinedTestDispatcher runs coroutines eagerly and does NOT try to drain infinite
     // SharedFlow collectors in advanceUntilIdle() — which would hang forever.
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -148,6 +168,7 @@ class CopilotViewModelAdasTest {
         every { bargeInController.events }            returns bargeEvents
         every { mqttAlertRepository.alerts }          returns MutableSharedFlow()
         every { voiceAmplitudeMonitor.amplitude }     returns MutableStateFlow(0f)
+        every { sarvamSttClient.lastDetectedLanguageCode } returns MutableStateFlow(null)
         every { walletRepository.state }              returns MutableStateFlow(com.vigia.core.wallet.WalletState())
         every { driverProfileRepository.profile }     returns flowOf(DriverProfile.NEW)
         every { conversationContextMgr.history() }    returns emptyList()

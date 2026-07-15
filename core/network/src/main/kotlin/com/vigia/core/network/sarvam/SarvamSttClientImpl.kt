@@ -2,6 +2,9 @@ package com.vigia.core.network.sarvam
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -31,6 +34,10 @@ class SarvamSttClientImpl @Inject constructor(
     @Named("VigiaApiBaseUrl")   private val baseUrl: String,
 ) : SarvamSttClient {
 
+    private val _lastDetectedLanguageCode = MutableStateFlow<String?>(null)
+    override val lastDetectedLanguageCode: StateFlow<String?> =
+        _lastDetectedLanguageCode.asStateFlow()
+
     override suspend fun transcribe(
         wavBytes: ByteArray,
         languageCode: String,
@@ -42,13 +49,10 @@ class SarvamSttClientImpl @Inject constructor(
                 filename = "audio.wav",
                 body     = wavBytes.toRequestBody(WAV_MEDIA),
             )
-            .addFormDataPart("model", "saarika:v2.5")
+            .addFormDataPart("model", "saaras:v3")
+            .addFormDataPart("mode", "transcribe")
+            .addFormDataPart("language_code", languageCode.ifBlank { "unknown" })
             .addFormDataPart("with_timestamps", "false")
-
-        // Only send language_code when the caller specifies a real BCP-47 code.
-        if (languageCode != "unknown" && languageCode.isNotBlank()) {
-            builder.addFormDataPart("language_code", languageCode)
-        }
 
         val proxyUrl = baseUrl.trimEnd('/') + "/sarvam-proxy/stt"
         val request = Request.Builder()
@@ -65,7 +69,11 @@ class SarvamSttClientImpl @Inject constructor(
             response.body?.string() ?: throw IOException("Sarvam STT: empty response")
         }
 
-        JSONObject(responseBody).optString("transcript", "")
+        JSONObject(responseBody).run {
+            _lastDetectedLanguageCode.value = optString("language_code")
+                .takeIf { it.isNotBlank() && it != "null" && it != "unknown" }
+            optString("transcript", "")
+        }
     }
 
     private companion object {

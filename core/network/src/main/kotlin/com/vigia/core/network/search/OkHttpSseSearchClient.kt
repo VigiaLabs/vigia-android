@@ -239,6 +239,7 @@ class OkHttpSseSearchClient @Inject constructor(
         }
         return JSONObject().apply {
             put("query",             ctx.queryText)
+            put("response_language", ctx.responseLanguage)
             put("context",           contextObj)
             put("conversationHistory", historyArr)
             put("routeAheadHazards", hazardsArr)
