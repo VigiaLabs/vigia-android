@@ -3,7 +3,9 @@ package com.vigia.core.sensor.tts
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.ToneGenerator
 import android.speech.tts.TextToSpeech
 import android.speech.tts.TextToSpeech.OnInitListener
 import android.util.Log
@@ -12,6 +14,7 @@ import com.vigia.core.network.sarvam.SarvamTtsClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -76,6 +79,7 @@ class TtsManager @Inject constructor(
     }
 
     @Volatile private var activeTrack: AudioTrack? = null
+    private var listeningCueJob: Job? = null
 
     private data class SpeechItem(
         val text: String,
@@ -139,7 +143,22 @@ class TtsManager @Inject constructor(
         androidTts.speak(text, queueMode, null, text.hashCode().toString())
     }
 
+    fun playListeningCue() {
+        listeningCueJob?.cancel()
+        listeningCueJob = scope.launch {
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 55)
+            try {
+                tone.startTone(ToneGenerator.TONE_PROP_ACK, 110)
+                delay(140)
+            } finally {
+                tone.release()
+            }
+        }
+    }
+
     fun stop() {
+        listeningCueJob?.cancel()
+        listeningCueJob = null
         androidTts.stop()
         stopTrack()
         // Drain queued items and fire their onDone callbacks so the ViewModel

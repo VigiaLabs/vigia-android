@@ -127,6 +127,7 @@ class CopilotViewModelAdasTest {
     private val routeHazards   = MutableStateFlow<List<RouteAheadHazard>>(emptyList())
     private val bleLinkState   = MutableStateFlow<BleLinkState>(BleLinkState.Idle)
     private val vadEvents      = MutableSharedFlow<LiveVadEngine.VadEvent>()
+    private val bargeEvents    = MutableSharedFlow<BargeInController.BargeInEvent>()
 
     private lateinit var vm: CopilotViewModel
 
@@ -143,7 +144,7 @@ class CopilotViewModelAdasTest {
         every { bleRepository.linkState }             returns bleLinkState
         every { liveVadEngine.events }                returns vadEvents
         every { ttsManager.ttsAmplitude }             returns MutableStateFlow(0f)
-        every { bargeInController.events }            returns MutableSharedFlow()
+        every { bargeInController.events }            returns bargeEvents
         every { mqttAlertRepository.alerts }          returns MutableSharedFlow()
         every { voiceAmplitudeMonitor.amplitude }     returns MutableStateFlow(0f)
         every { walletRepository.state }              returns MutableStateFlow(com.vigia.core.wallet.WalletState())
@@ -729,6 +730,52 @@ class CopilotViewModelAdasTest {
         testDispatcher.scheduler.runCurrent()
 
         assertEquals(0.42f, activeState()!!.voiceAmplitude, 0.001f)
+    }
+
+    @Test
+    fun `vad Ready plays the listening cue`() = runVmTest {
+        vm.startAutoVoiceMode()
+        testDispatcher.scheduler.runCurrent()
+
+        vadEvents.emit(LiveVadEngine.VadEvent.Ready)
+        testDispatcher.scheduler.runCurrent()
+
+        verify { ttsManager.playListeningCue() }
+    }
+
+    @Test
+    fun `hands free stop transcript closes voice mode without searching`() = runVmTest {
+        coEvery { sarvamSttClient.transcribe(any()) } returns "Okay, thank you."
+
+        vm.startAutoVoiceMode()
+        testDispatcher.scheduler.runCurrent()
+        vadEvents.emit(LiveVadEngine.VadEvent.UtteranceComplete(ByteArray(44)))
+        testDispatcher.scheduler.runCurrent()
+
+        assertFalse(activeState()!!.isVoiceOverlayVisible)
+        verify(exactly = 0) { searchClient.search(any()) }
+    }
+
+    @Test
+    fun `barge in stops speech immediately and captures stop command`() = runVmTest {
+        coEvery { sarvamSttClient.transcribe(any()) } returns "stop"
+        givenSearchReturns(SearchEvent.TextDelta("A long spoken response"), SearchEvent.Done)
+
+        vm.startAutoVoiceMode()
+        vm.sendMessage("Tell me about this road")
+        testDispatcher.scheduler.runCurrent()
+
+        bargeEvents.emit(BargeInController.BargeInEvent.SpeechStart)
+        testDispatcher.scheduler.runCurrent()
+
+        verify { ttsManager.stop() }
+        verify { ttsManager.playListeningCue() }
+        assertEquals(VoiceListeningState.BargeIn, activeState()!!.voiceListeningState)
+
+        bargeEvents.emit(BargeInController.BargeInEvent.UtteranceComplete(ByteArray(44)))
+        testDispatcher.scheduler.runCurrent()
+
+        assertFalse(activeState()!!.isVoiceOverlayVisible)
     }
 
     @Test

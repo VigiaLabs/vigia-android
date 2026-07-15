@@ -52,8 +52,36 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
+
+internal fun isVoiceSessionStopCommand(transcript: String): Boolean {
+    val normalized = transcript
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^a-z0-9' ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+    val exactCommands = setOf(
+        "stop",
+        "stop speaking",
+        "stop listening",
+        "stop conversation",
+        "end conversation",
+        "end the conversation",
+        "thank you",
+        "thanks",
+        "ok thank you",
+        "okay thank you",
+        "that's all",
+        "that is all",
+        "goodbye",
+        "bye",
+    )
+    return normalized in exactCommands ||
+        normalized.matches(Regex("^(please |ok |okay )?stop( please)?$")) ||
+        normalized.matches(Regex("^(ok |okay )?(thank you|thanks)( very much)?( vigia)?$"))
+}
 
 @HiltViewModel
 class CopilotViewModel @Inject constructor(
@@ -285,7 +313,9 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
-                if (transcript.isNotBlank() && _latestContext.value != null) {
+                if (isVoiceSessionStopCommand(transcript)) {
+                    dismissVoiceOverlay()
+                } else if (transcript.isNotBlank() && _latestContext.value != null) {
                     sendMessage(transcript)
                 } else {
                     reopenMic()
@@ -362,6 +392,9 @@ class CopilotViewModel @Inject constructor(
         vadObserveJob = viewModelScope.launch {
             liveVadEngine.events.collect { event ->
                 when (event) {
+                    is LiveVadEngine.VadEvent.Ready ->
+                        ttsManager.playListeningCue()
+
                     is LiveVadEngine.VadEvent.AmplitudeUpdate ->
                         updateActive { copy(voiceAmplitude = event.rms) }
 
@@ -388,7 +421,9 @@ class CopilotViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
-                if (transcript.isNotBlank() && _latestContext.value != null) {
+                if (isVoiceSessionStopCommand(transcript)) {
+                    dismissVoiceOverlay()
+                } else if (transcript.isNotBlank() && _latestContext.value != null) {
                     sendMessage(transcript)
                 } else {
                     reopenAutoMic()
@@ -400,17 +435,17 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
+    private var bargeObserveJob: Job? = null
+
     private fun observeBargeIn() {
-        viewModelScope.launch {
+        bargeObserveJob?.cancel()
+        bargeObserveJob = viewModelScope.launch {
             bargeInController.events.collectLatest { event ->
                 when (event) {
-                    is BargeInController.BargeInEvent.Detected -> {
+                    is BargeInController.BargeInEvent.SpeechStart -> {
                         val active = _uiState.value as? CopilotUiState.Active ?: return@collectLatest
                         if (active.voiceListeningState != VoiceListeningState.Speaking) return@collectLatest
                         Log.d(TAG, "Barge-in detected — interrupting TTS")
-                        ttsManager.stop()
-                        searchJob?.cancel()
-                        bargeInController.stopMonitoring()
                         updateActive {
                             copy(
                                 voiceListeningState = VoiceListeningState.BargeIn,
@@ -418,9 +453,22 @@ class CopilotViewModel @Inject constructor(
                                 voiceAmplitude      = 0f,
                             )
                         }
-                        // Brief pause so the VAD doesn't immediately pick up TTS bleed-through.
-                        delay(200)
-                        reopenAutoMic()
+                        ttsManager.stop()
+                        ttsManager.playListeningCue()
+                    }
+
+                    is BargeInController.BargeInEvent.UtteranceComplete -> {
+                        val active = _uiState.value as? CopilotUiState.Active ?: return@collectLatest
+                        if (active.voiceListeningState != VoiceListeningState.BargeIn) return@collectLatest
+                        bargeInController.stopMonitoring()
+                        updateActive {
+                            copy(
+                                voiceListeningState = VoiceListeningState.Processing,
+                                orbState            = OrbState.Searching,
+                                voiceAmplitude      = 0f,
+                            )
+                        }
+                        transcribeAndSearch(event.wav)
                     }
                 }
             }
@@ -802,9 +850,9 @@ class CopilotViewModel @Inject constructor(
                                 ttsManager.speakSarvam(answer) {
                                     viewModelScope.launch {
                                         bargeInController.stopMonitoring()
-                                        val stillOpen = (_uiState.value as? CopilotUiState.Active)
-                                            ?.isVoiceOverlayVisible == true
-                                        if (stillOpen) {
+                                        val currentVoiceState = (_uiState.value as? CopilotUiState.Active)
+                                            ?.voiceListeningState
+                                        if (currentVoiceState == VoiceListeningState.Speaking) {
                                             if (wasAutoVad) reopenAutoMic() else reopenMic()
                                         }
                                     }

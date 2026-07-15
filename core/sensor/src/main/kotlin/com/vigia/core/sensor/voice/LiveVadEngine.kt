@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,25 +29,26 @@ import kotlin.math.sqrt
  * Real-time Voice Activity Detection engine.
  *
  * Replaces the manual tap-to-stop pattern in [VoiceAmplitudeMonitor] with
- * automatic utterance boundary detection based on RMS energy thresholding.
+ * automatic utterance boundary detection based on an adaptive cabin-noise floor.
  *
  * State machine:
- *   SILENCE → (onset: [ONSET_FRAMES] frames > [SPEECH_RMS_THRESHOLD]) → SPEECH
- *   SPEECH  → (hangover: [HANGOVER_FRAMES] frames < [SILENCE_RMS_THRESHOLD]) → emit utterance
+ *   CALIBRATION → estimate steady ambient road/cabin noise
+ *   SILENCE → sustained energy above the adaptive speech threshold → SPEECH
+ *   SPEECH  → sustained return to the ambient floor → emit utterance
  *
  * Each [CHUNK_SAMPLES] window (~100ms at 16kHz) is evaluated. The engine emits:
  *   - [VadEvent.SpeechStart] when the onset condition first fires
  *   - [VadEvent.AmplitudeUpdate] on every chunk so the aurora mist stays alive
  *   - [VadEvent.UtteranceComplete] with the full PCM+WAV when silence hangover expires
  *
- * Gemini Live equivalent: this is the client-side endpointing that lets the user
- * speak naturally without pressing a button — identical to how Gemini Live's
- * automatic turn detection works in the browser.
+ * The voice-recognition audio source and platform noise suppressor reduce steady
+ * background noise before adaptive endpointing is applied.
  */
 @Singleton
 class LiveVadEngine @Inject constructor() {
 
     sealed class VadEvent {
+        object Ready : VadEvent()
         object SpeechStart : VadEvent()
         data class AmplitudeUpdate(val rms: Float) : VadEvent()
         data class UtteranceComplete(val wav: ByteArray) : VadEvent()
@@ -82,19 +84,25 @@ class LiveVadEngine @Inject constructor() {
         val bufSize = maxOf(minBuf, CHUNK_SAMPLES * 2)
 
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE,
             CHANNEL_CONFIG,
             AUDIO_FORMAT,
             bufSize,
         )
+        val noiseSuppressor = if (NoiseSuppressor.isAvailable()) {
+            NoiseSuppressor.create(recorder.audioSessionId)
+        } else null
         recorder.startRecording()
 
         val chunk = ShortArray(CHUNK_SAMPLES)
         val pcmBuffer = ByteArrayOutputStream()
-        var state = VadState.SILENCE
-        var onsetCount = 0
-        var hangoverCount = 0
+        val detector = AdaptiveSpeechDetector(
+            calibrationFrames = CALIBRATION_FRAMES,
+            onsetFrames = ONSET_FRAMES,
+            hangoverFrames = HANGOVER_FRAMES,
+        )
+        var recordingSpeech = false
 
         try {
             while (isActive) {
@@ -105,49 +113,33 @@ class LiveVadEngine @Inject constructor() {
                 _amplitude.value = rms
                 _events.tryEmit(VadEvent.AmplitudeUpdate(rms))
 
-                when (state) {
-                    VadState.SILENCE -> {
-                        if (rms > SPEECH_RMS_THRESHOLD) {
-                            onsetCount++
-                            if (onsetCount >= ONSET_FRAMES) {
-                                state = VadState.SPEECH
-                                hangoverCount = 0
-                                pcmBuffer.reset()
-                                _events.tryEmit(VadEvent.SpeechStart)
-                            }
-                        } else {
-                            onsetCount = 0
-                        }
-                        // Buffer pre-roll so we don't lose the onset frames
-                        appendPcm(pcmBuffer, chunk, read)
-                        if (pcmBuffer.size() > PRE_ROLL_BYTES) {
-                            val excess = pcmBuffer.toByteArray()
-                            pcmBuffer.reset()
-                            pcmBuffer.write(excess, excess.size - PRE_ROLL_BYTES, PRE_ROLL_BYTES)
-                        }
+                if (recordingSpeech) {
+                    appendPcm(pcmBuffer, chunk, read)
+                } else {
+                    appendPcm(pcmBuffer, chunk, read)
+                    trimToPreRoll(pcmBuffer)
+                }
+
+                when (detector.process(rms)) {
+                    AdaptiveSpeechDetector.Result.Ready -> _events.tryEmit(VadEvent.Ready)
+                    AdaptiveSpeechDetector.Result.SpeechStarted -> {
+                        recordingSpeech = true
+                        _events.tryEmit(VadEvent.SpeechStart)
                     }
-                    VadState.SPEECH -> {
-                        appendPcm(pcmBuffer, chunk, read)
-                        if (rms < SILENCE_RMS_THRESHOLD) {
-                            hangoverCount++
-                            if (hangoverCount >= HANGOVER_FRAMES) {
-                                state = VadState.SILENCE
-                                onsetCount = 0
-                                hangoverCount = 0
-                                val pcm = pcmBuffer.toByteArray()
-                                pcmBuffer.reset()
-                                _amplitude.value = 0f
-                                _events.tryEmit(VadEvent.UtteranceComplete(buildWav(pcm)))
-                            }
-                        } else {
-                            hangoverCount = 0
-                        }
+                    AdaptiveSpeechDetector.Result.SpeechEnded -> {
+                        recordingSpeech = false
+                        val pcm = pcmBuffer.toByteArray()
+                        pcmBuffer.reset()
+                        _amplitude.value = 0f
+                        _events.tryEmit(VadEvent.UtteranceComplete(buildWav(pcm)))
                     }
+                    AdaptiveSpeechDetector.Result.None -> Unit
                 }
             }
         } finally {
-            recorder.stop()
+            runCatching { recorder.stop() }
             recorder.release()
+            noiseSuppressor?.release()
             _amplitude.value = 0f
         }
     }
@@ -164,6 +156,13 @@ class LiveVadEngine @Inject constructor() {
         val bytes = ByteArray(count * 2)
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(buf, 0, count)
         out.write(bytes)
+    }
+
+    private fun trimToPreRoll(out: ByteArrayOutputStream) {
+        if (out.size() <= PRE_ROLL_BYTES) return
+        val bytes = out.toByteArray()
+        out.reset()
+        out.write(bytes, bytes.size - PRE_ROLL_BYTES, PRE_ROLL_BYTES)
     }
 
     private fun buildWav(pcm: ByteArray): ByteArray {
@@ -188,8 +187,6 @@ class LiveVadEngine @Inject constructor() {
         write(v and 0xFF); write((v shr 8) and 0xFF)
     }
 
-    private enum class VadState { SILENCE, SPEECH }
-
     companion object {
         private const val SAMPLE_RATE     = 16_000
         private const val CHANNEL_CONFIG  = AudioFormat.CHANNEL_IN_MONO
@@ -197,12 +194,11 @@ class LiveVadEngine @Inject constructor() {
         // 100ms chunks — fine enough for fast onset, not so small it thrashes CPU.
         private const val CHUNK_SAMPLES   = SAMPLE_RATE / 10
 
-        // Onset: 3 consecutive chunks (300ms) above threshold triggers SPEECH.
-        private const val SPEECH_RMS_THRESHOLD = 0.015f
+        // Calibrate against the current cabin/road noise before accepting speech.
+        private const val CALIBRATION_FRAMES   = 5
         private const val ONSET_FRAMES         = 3
 
-        // Hangover: 8 consecutive chunks (800ms) below threshold = end of utterance.
-        private const val SILENCE_RMS_THRESHOLD = 0.010f
+        // 800ms without voice ends the turn even when steady ambient noise continues.
         private const val HANGOVER_FRAMES        = 8
 
         // Pre-roll: 300ms of audio buffered in SILENCE so onset frames aren't lost.
