@@ -39,6 +39,7 @@ import com.vigia.core.sensor.voice.VoiceAmplitudeMonitor
 import com.vigia.core.wallet.WalletRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,6 +82,35 @@ internal fun isVoiceSessionStopCommand(transcript: String): Boolean {
     return normalized in exactCommands ||
         normalized.matches(Regex("^(please |ok |okay )?stop( please)?$")) ||
         normalized.matches(Regex("^(ok |okay )?(thank you|thanks)( very much)?( vigia)?$"))
+}
+
+internal fun naturalVoiceProgress(step: String): String? {
+    val normalized = step.lowercase(Locale.ROOT)
+    if (normalized.contains("classif") || normalized.contains("intent")) return null
+    return when {
+        Regex("verify|cross.?refer|official|source").containsMatchIn(normalized) ->
+            "Let me verify that against the official road records."
+        Regex("search|query|retriev|document|record|road").containsMatchIn(normalized) ->
+            "One moment while I check the road records."
+        else -> null
+    }
+}
+
+internal fun isLikelyPlaybackEcho(transcript: String, spokenText: String?): Boolean {
+    if (spokenText.isNullOrBlank() || isVoiceSessionStopCommand(transcript)) return false
+    fun normalize(value: String) = value
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^a-z0-9 ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+    val heard = normalize(transcript)
+    val spoken = normalize(spokenText)
+    if (heard.length < 16 || heard.split(' ').size < 4) return false
+    if (spoken.contains(heard)) return true
+    val heardTokens = heard.split(' ').filter { it.length > 2 }.toSet()
+    val spokenTokens = spoken.split(' ').filter { it.length > 2 }.toSet()
+    return heardTokens.size >= 4 &&
+        heardTokens.count { it in spokenTokens }.toDouble() / heardTokens.size >= 0.85
 }
 
 @HiltViewModel
@@ -417,29 +447,50 @@ class CopilotViewModel @Inject constructor(
         }
     }
 
-    private fun transcribeAndSearch(wav: ByteArray) {
+    private fun transcribeAndSearch(wav: ByteArray, fromBargeIn: Boolean = false) {
         viewModelScope.launch {
             try {
                 val transcript = sarvamSttClient.transcribe(wav)
                 if (isVoiceSessionStopCommand(transcript)) {
                     dismissVoiceOverlay()
+                } else if (fromBargeIn && isLikelyPlaybackEcho(transcript, ttsManager.lastSpokenText.value)) {
+                    Log.d(TAG, "Discarding probable playback echo")
+                    reopenCurrentVoiceMic()
                 } else if (transcript.isNotBlank() && _latestContext.value != null) {
                     sendMessage(transcript)
                 } else {
-                    reopenAutoMic()
+                    clarifyAndReopenMic()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "VAD STT error — reopening mic", e)
-                reopenAutoMic()
+                clarifyAndReopenMic()
             }
         }
+    }
+
+    private fun clarifyAndReopenMic() {
+        updateActive {
+            copy(
+                voiceListeningState = VoiceListeningState.Speaking,
+                orbState = OrbState.Active,
+                voiceAmplitude = 0f,
+            )
+        }
+        ttsManager.speakSarvam("I didn't catch that. Could you say it again?") {
+            viewModelScope.launch { reopenCurrentVoiceMic() }
+        }
+    }
+
+    private fun reopenCurrentVoiceMic() {
+        val autoVad = (_uiState.value as? CopilotUiState.Active)?.isAutoVadActive == true
+        if (autoVad) reopenAutoMic() else reopenMic()
     }
 
     private var bargeObserveJob: Job? = null
 
     private fun observeBargeIn() {
         bargeObserveJob?.cancel()
-        bargeObserveJob = viewModelScope.launch {
+        bargeObserveJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             bargeInController.events.collectLatest { event ->
                 when (event) {
                     is BargeInController.BargeInEvent.SpeechStart -> {
@@ -468,7 +519,7 @@ class CopilotViewModel @Inject constructor(
                                 voiceAmplitude      = 0f,
                             )
                         }
-                        transcribeAndSearch(event.wav)
+                        transcribeAndSearch(event.wav, fromBargeIn = true)
                     }
                 }
             }
@@ -755,6 +806,7 @@ class CopilotViewModel @Inject constructor(
     private fun startSearch(context: VigiaSearchContext, sessionId: String) {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
+            var hasSpokenProgress = false
             updateActive {
                 copy(
                     orbState          = OrbState.Searching,
@@ -782,8 +834,11 @@ class CopilotViewModel @Inject constructor(
                                     completedSteps = completedSteps + event.message,
                                 )
                             }
-                            if (isVoice && event.message.isNotBlank()) {
-                                ttsManager.speakSarvam(event.message)
+                            if (isVoice && !hasSpokenProgress) {
+                                naturalVoiceProgress(event.message)?.let { progress ->
+                                    hasSpokenProgress = true
+                                    ttsManager.speakSarvam(progress)
+                                }
                             }
                         }
 
@@ -844,8 +899,8 @@ class CopilotViewModel @Inject constructor(
                             if (answer.isNotBlank()) {
                                 // Start barge-in monitor BEFORE TTS starts so even the first
                                 // syllable of the answer can be interrupted.
-                                if (wasVoiceActive) bargeInController.startMonitoring()
                                 observeBargeIn()
+                                if (wasVoiceActive) bargeInController.startMonitoring()
 
                                 ttsManager.speakSarvam(answer) {
                                     viewModelScope.launch {

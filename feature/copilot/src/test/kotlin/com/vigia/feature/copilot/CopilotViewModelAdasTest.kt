@@ -144,6 +144,7 @@ class CopilotViewModelAdasTest {
         every { bleRepository.linkState }             returns bleLinkState
         every { liveVadEngine.events }                returns vadEvents
         every { ttsManager.ttsAmplitude }             returns MutableStateFlow(0f)
+        every { ttsManager.lastSpokenText }           returns MutableStateFlow(null)
         every { bargeInController.events }            returns bargeEvents
         every { mqttAlertRepository.alerts }          returns MutableSharedFlow()
         every { voiceAmplitudeMonitor.amplitude }     returns MutableStateFlow(0f)
@@ -252,6 +253,36 @@ class CopilotViewModelAdasTest {
         val state = activeState()!!
         assertTrue(state.completedSteps.contains("Querying hazard DB"))
         assertTrue(state.completedSteps.contains("Analysing road context"))
+    }
+
+    @Test
+    fun `voice mode never speaks raw intent classification step`() = runVmTest {
+        val stepFlow = MutableSharedFlow<SearchEvent>()
+        every { searchClient.search(any()) } returns stepFlow
+
+        vm.startAutoVoiceMode()
+        vm.sendMessage("who maintains this road?")
+        stepFlow.emit(SearchEvent.Step("Classifying intent", 0L))
+        testDispatcher.scheduler.runCurrent()
+
+        verify(exactly = 0) { ttsManager.speakSarvam("Classifying intent", any(), any()) }
+    }
+
+    @Test
+    fun `voice mode narrates one natural retrieval acknowledgement`() = runVmTest {
+        val stepFlow = MutableSharedFlow<SearchEvent>()
+        every { searchClient.search(any()) } returns stepFlow
+
+        vm.startAutoVoiceMode()
+        vm.sendMessage("who maintains this road?")
+        stepFlow.emit(SearchEvent.Step("Classifying intent", 0L))
+        stepFlow.emit(SearchEvent.Step("Searching NHAI documents", 1L))
+        stepFlow.emit(SearchEvent.Step("Verifying official sources", 2L))
+        testDispatcher.scheduler.runCurrent()
+
+        verify(exactly = 1) {
+            ttsManager.speakSarvam("One moment while I check the road records.", any(), any())
+        }
     }
 
     @Test
@@ -776,6 +807,26 @@ class CopilotViewModelAdasTest {
         testDispatcher.scheduler.runCurrent()
 
         assertFalse(activeState()!!.isVoiceOverlayVisible)
+    }
+
+    @Test
+    fun `barge in playback echo is discarded instead of searched`() = runVmTest {
+        every { ttsManager.lastSpokenText } returns MutableStateFlow(
+            "The road authority recommends reducing speed near the damaged shoulder."
+        )
+        coEvery { sarvamSttClient.transcribe(any()) } returns
+            "road authority recommends reducing speed near the damaged shoulder"
+        givenSearchReturns(SearchEvent.TextDelta("A long spoken response"), SearchEvent.Done)
+
+        vm.startAutoVoiceMode()
+        vm.sendMessage("What should I do?")
+        testDispatcher.scheduler.runCurrent()
+        bargeEvents.emit(BargeInController.BargeInEvent.SpeechStart)
+        bargeEvents.emit(BargeInController.BargeInEvent.UtteranceComplete(ByteArray(44)))
+        testDispatcher.scheduler.runCurrent()
+
+        verify(exactly = 1) { searchClient.search(any()) }
+        assertEquals(VoiceListeningState.AutoListening, activeState()!!.voiceListeningState)
     }
 
     @Test

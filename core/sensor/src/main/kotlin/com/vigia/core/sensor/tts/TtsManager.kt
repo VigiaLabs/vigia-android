@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sqrt
@@ -61,6 +62,9 @@ class TtsManager @Inject constructor(
     private val _ttsAmplitude = MutableStateFlow(0f)
     val ttsAmplitude: StateFlow<Float> = _ttsAmplitude.asStateFlow()
 
+    private val _lastSpokenText = MutableStateFlow<String?>(null)
+    val lastSpokenText: StateFlow<String?> = _lastSpokenText.asStateFlow()
+
     private val androidTts: TextToSpeech = TextToSpeech(context, this)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -85,8 +89,11 @@ class TtsManager @Inject constructor(
         val text: String,
         val languageCode: String,
         val pace: Double,
+        val generation: Long,
         val onDone: () -> Unit,
     )
+
+    private val playbackGeneration = AtomicLong(0L)
 
     // Unlimited channel — items are drained sequentially by a single coroutine so
     // step narrations and the final answer always play in arrival order.
@@ -96,12 +103,18 @@ class TtsManager @Inject constructor(
         scope.launch {
             for (item in speechQueue) {
                 try {
+                    if (item.generation != playbackGeneration.get()) continue
+                    _lastSpokenText.value = item.text
                     val wav = sarvamTtsClient.synthesize(item.text, item.languageCode, pace = item.pace)
-                    playWavAndAwait(wav)
+                    if (item.generation == playbackGeneration.get()) {
+                        playWavAndAwait(wav, item.generation)
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Sarvam TTS failed, falling back to Android TTS: ${e.message}")
                     _isSpeaking.value = false
-                    speak(item.text, TextToSpeech.QUEUE_ADD)
+                    if (item.generation == playbackGeneration.get()) {
+                        speak(item.text, TextToSpeech.QUEUE_ADD)
+                    }
                 } finally {
                     item.onDone()
                 }
@@ -130,7 +143,15 @@ class TtsManager @Inject constructor(
         onDone: () -> Unit = {},
     ) {
         if (text.isBlank()) { onDone(); return }
-        speechQueue.trySend(SpeechItem(text, languageCode, profileSpeechRate.toDouble(), onDone))
+        speechQueue.trySend(
+            SpeechItem(
+                text = text,
+                languageCode = languageCode,
+                pace = profileSpeechRate.toDouble(),
+                generation = playbackGeneration.get(),
+                onDone = onDone,
+            )
+        )
     }
 
     /**
@@ -140,6 +161,7 @@ class TtsManager @Inject constructor(
      */
     fun speak(text: String, queueMode: Int = TextToSpeech.QUEUE_ADD) {
         if (!_isReady.value) return
+        _lastSpokenText.value = text
         androidTts.speak(text, queueMode, null, text.hashCode().toString())
     }
 
@@ -157,6 +179,7 @@ class TtsManager @Inject constructor(
     }
 
     fun stop() {
+        playbackGeneration.incrementAndGet()
         listeningCueJob?.cancel()
         listeningCueJob = null
         androidTts.stop()
@@ -182,8 +205,8 @@ class TtsManager @Inject constructor(
      * static mode, and **suspends** until playback is complete. Sets [isSpeaking]
      * for the duration so the UI can animate the aurora mist.
      */
-    private suspend fun playWavAndAwait(wav: ByteArray) {
-        if (wav.size < 44) return
+    private suspend fun playWavAndAwait(wav: ByteArray, generation: Long) {
+        if (wav.size < 44 || generation != playbackGeneration.get()) return
 
         val header = ByteBuffer.wrap(wav).order(ByteOrder.LITTLE_ENDIAN)
         header.position(24); val sampleRate    = header.int
@@ -199,7 +222,7 @@ class TtsManager @Inject constructor(
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -221,7 +244,8 @@ class TtsManager @Inject constructor(
         _isSpeaking.value = true
         try {
             track.play()
-            while (runCatching { track.playState }.getOrDefault(AudioTrack.PLAYSTATE_STOPPED)
+            while (generation == playbackGeneration.get() &&
+                   runCatching { track.playState }.getOrDefault(AudioTrack.PLAYSTATE_STOPPED)
                    == AudioTrack.PLAYSTATE_PLAYING) {
                 // Compute RMS of the 100 ms PCM window around the current playhead
                 // so the UI can animate the orb and aurora to the AI's voice level.

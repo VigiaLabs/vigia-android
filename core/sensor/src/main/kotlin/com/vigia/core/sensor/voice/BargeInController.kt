@@ -1,7 +1,9 @@
 package com.vigia.core.sensor.voice
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
@@ -19,12 +21,15 @@ import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sqrt
 
 @Singleton
-class BargeInController @Inject constructor() {
+class BargeInController @Inject constructor(
+    @ApplicationContext context: Context,
+) {
 
     sealed class BargeInEvent {
         object SpeechStart : BargeInEvent()
@@ -35,18 +40,38 @@ class BargeInController @Inject constructor() {
     val events: SharedFlow<BargeInEvent> = _events.asSharedFlow()
 
     private var monitorScope: CoroutineScope? = null
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var previousAudioMode: Int? = null
 
     @SuppressLint("MissingPermission")
     fun startMonitoring() {
         stopMonitoring()
+        previousAudioMode = audioManager.mode
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         monitorScope = scope
-        scope.launch { runMonitor() }
+        scope.launch {
+            try {
+                runMonitor()
+            } finally {
+                if (monitorScope === scope) {
+                    monitorScope = null
+                    restoreAudioMode()
+                }
+            }
+        }
     }
 
     fun stopMonitoring() {
         monitorScope?.cancel()
         monitorScope = null
+        restoreAudioMode()
+    }
+
+    private fun restoreAudioMode() {
+        val mode = previousAudioMode ?: return
+        previousAudioMode = null
+        audioManager.mode = mode
     }
 
     @SuppressLint("MissingPermission")
@@ -60,10 +85,10 @@ class BargeInController @Inject constructor() {
             maxOf(minBuffer, CHUNK_SAMPLES * 2),
         )
         val echoCanceler = if (AcousticEchoCanceler.isAvailable()) {
-            AcousticEchoCanceler.create(recorder.audioSessionId)
+            AcousticEchoCanceler.create(recorder.audioSessionId)?.apply { enabled = true }
         } else null
         val noiseSuppressor = if (NoiseSuppressor.isAvailable()) {
-            NoiseSuppressor.create(recorder.audioSessionId)
+            NoiseSuppressor.create(recorder.audioSessionId)?.apply { enabled = true }
         } else null
         val detector = AdaptiveSpeechDetector(
             calibrationFrames = CALIBRATION_FRAMES,
