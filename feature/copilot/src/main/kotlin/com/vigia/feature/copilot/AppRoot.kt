@@ -1,11 +1,15 @@
 package com.vigia.feature.copilot
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -19,11 +23,10 @@ import com.vigia.feature.copilot.theme.VigiaTheme
 import com.vigia.feature.pairing.PairingScreen
 
 /**
- * App entry gate. Routes on auth state then pairing state:
+ * App entry gate. Hardware pairing is optional and never blocks the copilot:
  *   Loading   → branded splash
  *   SignedOut → [AuthScreen]
- *   SignedIn + not paired → [PairingScreen] (one-time QR scan, design spec §5)
- *   SignedIn + paired     → [CopilotRoute]
+ *   SignedIn  → [CopilotRoute]
  */
 @Composable
 fun AppRoot(bypassSignIn: Boolean = false) {
@@ -31,12 +34,8 @@ fun AppRoot(bypassSignIn: Boolean = false) {
     val authState by authViewModel.authState.collectAsStateWithLifecycle()
     val ui        by authViewModel.ui.collectAsStateWithLifecycle()
 
-    val appRootViewModel: AppRootViewModel = hiltViewModel()
-    val isPaired by appRootViewModel.isPaired.collectAsStateWithLifecycle()
-
     if (bypassSignIn) {
         AuthenticatedApp(
-            isPaired = isPaired,
             accountName = "RoadWatch Demo",
             accountEmail = "Demo build · sign-in bypassed",
             onSignOut = {},
@@ -63,7 +62,6 @@ fun AppRoot(bypassSignIn: Boolean = false) {
 
         is AuthState.SignedIn -> {
             AuthenticatedApp(
-                isPaired = isPaired,
                 accountName = state.user.displayName,
                 accountEmail = state.user.email,
                 onSignOut = authViewModel::signOut,
@@ -74,17 +72,19 @@ fun AppRoot(bypassSignIn: Boolean = false) {
 
 @Composable
 private fun AuthenticatedApp(
-    isPaired: Boolean?,
     accountName: String?,
     accountEmail: String,
     onSignOut: () -> Unit,
 ) {
-    val appRootViewModel: AppRootViewModel = hiltViewModel()
-    when {
-        isPaired == null -> SplashGate()
-        isPaired == false -> PairingScreen(onPairingComplete = appRootViewModel::onPairingComplete)
-        else -> CopilotRoute(
+    var showPairing by rememberSaveable { mutableStateOf(false) }
+
+    if (showPairing) {
+        BackHandler { showPairing = false }
+        PairingScreen(onPairingComplete = { showPairing = false })
+    } else {
+        CopilotRoute(
             onSignOut = onSignOut,
+            onPairHardware = { showPairing = true },
             accountName = accountName,
             accountEmail = accountEmail,
         )

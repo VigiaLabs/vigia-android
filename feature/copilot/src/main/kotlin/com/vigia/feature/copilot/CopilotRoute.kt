@@ -36,6 +36,7 @@ import com.vigia.feature.copilot.voice.VoiceCallOverlay
 @Composable
 fun CopilotRoute(
     onSignOut: () -> Unit = {},
+    onPairHardware: () -> Unit = {},
     accountName: String? = null,
     accountEmail: String? = null,
     viewModel: CopilotViewModel = hiltViewModel(),
@@ -98,6 +99,7 @@ fun CopilotRoute(
             onLoadSession       = viewModel::loadSession,
             onDeleteSession     = viewModel::deleteSession,
             onSignOut           = onSignOut,
+            onPairHardware      = onPairHardware,
             onStartVoice        = onStartVoiceWithPermission,
             onStartAutoVoice    = onStartAutoVoiceWithPermission,
             onEndVoice          = viewModel::endVoiceRecording,

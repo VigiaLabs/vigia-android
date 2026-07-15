@@ -182,6 +182,7 @@ internal fun CopilotScreen(
     onLoadSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
     onSignOut: () -> Unit = {},
+    onPairHardware: () -> Unit = {},
     onStartVoice: () -> Unit = {},
     onStartAutoVoice: () -> Unit = {},
     onEndVoice: () -> Unit = {},
@@ -205,6 +206,7 @@ internal fun CopilotScreen(
                 onLoadSession    = onLoadSession,
                 onDeleteSession  = onDeleteSession,
                 onSignOut        = onSignOut,
+                onPairHardware   = onPairHardware,
                 onStartVoice     = onStartVoice,
                 onStartAutoVoice = onStartAutoVoice,
                 onEndVoice       = onEndVoice,
@@ -272,6 +274,7 @@ private fun ActiveShell(
     onLoadSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
     onSignOut: () -> Unit,
+    onPairHardware: () -> Unit,
     onStartVoice: () -> Unit,
     onStartAutoVoice: () -> Unit = {},
     onEndVoice: () -> Unit,
@@ -333,6 +336,10 @@ private fun ActiveShell(
                 onSignOut = {
                     scope.launch { drawerState.close() }
                     onSignOut()
+                },
+                onPairHardware = {
+                    scope.launch { drawerState.close() }
+                    onPairHardware()
                 },
                 accountName  = accountName,
                 accountEmail = accountEmail,
@@ -707,6 +714,7 @@ private fun VigiaDrawer(
     onLoadSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
     onSignOut: () -> Unit,
+    onPairHardware: () -> Unit,
     accountName: String?,
     accountEmail: String?,
 ) {
@@ -815,6 +823,12 @@ private fun VigiaDrawer(
             )
             Spacer(Modifier.height(8.dp))
 
+            DrawerFooterItem(
+                icon = Icons.Filled.QrCode,
+                label = "Pair road sensor",
+                showSoon = false,
+                onClick = onPairHardware,
+            )
             DrawerFooterItem(icon = Icons.Filled.Settings, label = "Settings")
             DrawerFooterItem(icon = Icons.Filled.Info, label = "Help & feedback")
             DrawerFooterItem(
