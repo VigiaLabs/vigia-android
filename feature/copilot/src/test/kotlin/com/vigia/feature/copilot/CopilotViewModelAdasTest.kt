@@ -304,6 +304,8 @@ class CopilotViewModelAdasTest {
         verify(exactly = 1) {
             ttsManager.speakSarvam("One moment while I check the road records.", any(), any())
         }
+        verify(exactly = 1) { bargeInController.startMonitoring() }
+        assertEquals(VoiceListeningState.Speaking, activeState()!!.voiceListeningState)
     }
 
     @Test

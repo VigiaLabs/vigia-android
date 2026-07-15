@@ -12,8 +12,13 @@ class VoiceStopCommandTest {
         assertTrue(isVoiceSessionStopCommand("stop"))
         assertTrue(isVoiceSessionStopCommand("Okay, thank you."))
         assertTrue(isVoiceSessionStopCommand("Please stop"))
+        assertTrue(isVoiceSessionStopCommand("Stop it now"))
+        assertTrue(isVoiceSessionStopCommand("Could you stop"))
+        assertTrue(isVoiceSessionStopCommand("Thankyou"))
         assertTrue(isVoiceSessionStopCommand("Thank you very much, Vigia"))
         assertTrue(isVoiceSessionStopCommand("That's all!"))
+        assertTrue(isVoiceSessionStopCommand("Ruk jao"))
+        assertTrue(isVoiceSessionStopCommand("நன்றி"))
     }
 
     @Test

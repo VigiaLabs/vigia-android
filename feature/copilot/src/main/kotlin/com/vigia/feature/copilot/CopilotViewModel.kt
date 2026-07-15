@@ -60,17 +60,21 @@ import javax.inject.Inject
 internal fun isVoiceSessionStopCommand(transcript: String): Boolean {
     val normalized = transcript
         .lowercase(Locale.ROOT)
-        .replace(Regex("[^\\p{L}\\p{N}' ]"), " ")
+        .replace(Regex("[^\\p{L}\\p{M}\\p{N}' ]"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
     val exactCommands = setOf(
         "stop",
+        "stop it",
+        "stop now",
+        "stop talking",
         "stop speaking",
         "stop listening",
         "stop conversation",
         "end conversation",
         "end the conversation",
         "thank you",
+        "thankyou",
         "thanks",
         "ok thank you",
         "okay thank you",
@@ -84,10 +88,28 @@ internal fun isVoiceSessionStopCommand(transcript: String): Boolean {
         "बोलना बंद करो",
         "धन्यवाद",
         "ठीक है धन्यवाद",
+        "रुक जाओ",
+        "शुक्रिया",
+        "நிறுத்து",
+        "போதும்",
+        "நன்றி",
+        "ఆపు",
+        "చాలు",
+        "ధన్యవాదాలు",
+        "ruko",
+        "ruk jao",
+        "bas",
+        "band karo",
+        "dhanyavad",
+        "shukriya",
+        "niruthu",
+        "podhum",
+        "nandri",
     )
     return normalized in exactCommands ||
-        normalized.matches(Regex("^(please |ok |okay )?stop( please)?$")) ||
-        normalized.matches(Regex("^(ok |okay )?(thank you|thanks)( very much)?( vigia)?$"))
+        normalized.matches(Regex("^(please |ok |okay |could you |can you )?stop( it| talking| speaking| listening| now)?( please| now)?$")) ||
+        normalized.matches(Regex("^(ok |okay )?(thank ?you|thanks)( very much)?( vigia)?( bye| goodbye)?$")) ||
+        normalized.matches(Regex("^(please )?end( this| the)? (conversation|call|session)( please| now)?$"))
 }
 
 internal fun resolveTurnLanguageCode(
@@ -539,11 +561,17 @@ class CopilotViewModel @Inject constructor(
                 voiceAmplitude = 0f,
             )
         }
+        observeBargeIn()
+        bargeInController.startMonitoring()
         ttsManager.speakSarvam(
             clarificationPrompt(lastTurnLanguageCode),
             languageCode = lastTurnLanguageCode,
         ) {
-            viewModelScope.launch { reopenCurrentVoiceMic() }
+            viewModelScope.launch {
+                bargeInController.stopMonitoring()
+                val current = (_uiState.value as? CopilotUiState.Active)?.voiceListeningState
+                if (current == VoiceListeningState.Speaking) reopenCurrentVoiceMic()
+            }
         }
     }
 
@@ -570,6 +598,7 @@ class CopilotViewModel @Inject constructor(
                                 voiceAmplitude      = 0f,
                             )
                         }
+                        searchJob?.cancel()
                         ttsManager.stop()
                         ttsManager.playListeningCue()
                     }
@@ -903,6 +932,15 @@ class CopilotViewModel @Inject constructor(
                             if (isVoice && !hasSpokenProgress) {
                                 localizedVoiceProgress(event.message, lastTurnLanguageCode)?.let { progress ->
                                     hasSpokenProgress = true
+                                    updateActive {
+                                        copy(
+                                            voiceListeningState = VoiceListeningState.Speaking,
+                                            orbState = OrbState.Active,
+                                            voiceAmplitude = 0f,
+                                        )
+                                    }
+                                    observeBargeIn()
+                                    bargeInController.startMonitoring()
                                     ttsManager.speakSarvam(progress, languageCode = lastTurnLanguageCode)
                                 }
                             }
@@ -979,6 +1017,7 @@ class CopilotViewModel @Inject constructor(
                                     }
                                 }
                             } else if (wasVoiceActive) {
+                                bargeInController.stopMonitoring()
                                 if (wasAutoVad) reopenAutoMic() else reopenMic()
                             }
                         }
