@@ -22,6 +22,34 @@ The findings below are the residual gaps.
 
 ---
 
+## Review Reconciliation (v2.1 — cross-reviewed and verified against source, 2026-07-25)
+
+An independent second review (Codex) cross-checked this spec; every item was re-verified by reading the cited files. **Authoritative where it conflicts with the original findings.**
+
+### REVISED
+
+- **M-QUAL-1 → M-CRIT-1 (upgraded).** `AuthModule.kt:24` selects `DemoAuthRepository` at **runtime** whenever `AmplifyInitializer.isConfigured` is false — not merely a flavor-binding risk. DemoAuth accepts any email + any 8-char password, so an Amplify init failure in production silently disables authentication (runtime fail-open). Fix: bind by source set/flavor and fail **closed** in production — no demo fallback reachable in release.
+- **M-QUAL-4 — CLOSED (confirmed safe).** `NetworkModule.kt:67,98` uses `Level.BODY` only under `BuildConfig.DEBUG`; release is `NONE`.
+- **M-SEC-4 — remains a verification task** (PKCE is runtime/library behavior, not provable from checked-in config alone).
+
+### New CONFIRMED findings
+
+- **M-CRIT-2 — Device-wallet binding never succeeds (P0, cross-repo).** `PairingViewModel.kt:169` hardcodes `deviceSig = ""` (TODO: obtain the Pi ECDSA signature over the bind challenge via BLE). The server correctly 401s; `ClaimDeviceRepositoryImpl` maps non-409 responses to `NetworkError`; the only caller of `claimDevice` is the pairing flow (no next-launch retry despite the comment). Net effect: the 1:1 device↔wallet binding is never established and pairing silently degrades to local-only. Fix requires all three: a Pi BLE "sign binding challenge" command (raspi R-SEC-6), the Android call to obtain it + a real retry state machine, and the transactional claim (amazon A-SEC-6).
+- **M-SEC-5 — allowBackup enabled (P1).** `AndroidManifest.xml:14` `allowBackup="true"` with sample rules. Wallet ciphertext, pairing state, and pinned identity may be backed up; restored wallet ciphertext won't match a new device's Keystore-bound AES key (unusable), and sensitive material leaves the device. Fix: exclude the wallet/pairing/keystore stores from backup, or disable backup.
+- **M-QUAL-7 — Release accepts empty config (P1).** `AndroidApplicationConventionPlugin.kt:54` allows empty API/MQTT/MAC config values, so CI can produce a successful-but-unusable release APK. Fix: release-variant Gradle validation that fails the build on empty required config.
+
+### Revised priority (vigia2)
+
+1. M-CRIT-1 fail-closed auth in release.
+2. M-CRIT-2 binding (coordinated with raspi + amazon).
+3. M-SEC-1 BLE null-key compile-out; M-SEC-2 biometric payout signing.
+4. M-SEC-5 backup exclusion; M-QUAL-7 release-config validation.
+5. M-SEC-3 timestamped registration; remaining hardening.
+
+Closed: M-QUAL-4.
+
+---
+
 ## 1. Architecture recap (as-built)
 
 ```
