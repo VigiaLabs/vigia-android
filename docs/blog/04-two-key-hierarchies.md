@@ -35,3 +35,35 @@ Three secrets, three different answers. The device identity goes in hardware bec
 The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
 *Engineering VIGIA Mobile · Episode 4 of 5 — Previous: Episode 3. Next: Episode 5, Never drop a token, always deliver the warning.*
+
+---
+
+## 🎓 CS Fundamentals — study companion
+
+*This is a **Security + OS** episode on key storage: trusted execution environments, key wrapping, non-extractable keys, and secrets management. "Where do you store secrets on a device?" is a sharp security-interview question.*
+
+### Security / OS — key storage & trust
+
+- **Trusted Execution Environment (TEE) / secure element.** A TEE (ARM TrustZone; a StrongBox secure element) is an isolated execution environment the main OS can't read into. The Android Keystore generates the device's P-256 key *inside* it — the private key is **non-exportable**, so even a fully compromised app can't read it. This is hardware-rooted trust.
+- **The honest limit: not every algorithm is hardware-native.** The wallet uses **Ed25519**, which the Keystore can't hold as a hardware key. So the design does the next best thing and *says so*: generate Ed25519 in software, then **key-wrap** it — encrypt the private key with an AES-256-GCM key that *is* TEE-resident and non-exportable, and store only the ciphertext. At rest it's hardware-protected; the honest cost is a brief in-memory exposure at signing time. **Knowing and stating the boundary of your guarantee is the mark of real security engineering.**
+- **Key wrapping / envelope encryption.** Encrypting one key with another (the wrapping key stays in hardware) is **envelope encryption** — the same pattern as AWS KMS data keys. The ciphertext is useless without the hardware-held wrapping key, and binding it to the device means a stolen backup is inert on another phone.
+- **Proof of possession, not shared secrets.** Every telemetry upload / wallet op is *signed*; the server verifies the public key. There's no bearer token in the app that, if extracted, grants impersonation — **possession of the private key is the credential, proven by signing.** This is why signatures beat API keys for device identity.
+- **Secrets management: don't ship the secret.** The strongest protection for third-party keys (Sarvam, cloud) is that they're **not in the APK at all** — the app calls a backend proxy that holds them server-side (in a secrets manager) and authenticates the app via its own token. Decompiling the APK yields nothing. Rule: *a client should never hold a credential it doesn't strictly need.*
+
+**Interview Q&A.**
+1. *What is a TEE / secure element and why use it for keys?* → Isolated hardware the OS can't read; keys are non-exportable, surviving a full OS/app compromise.
+2. *You must use an algorithm the secure hardware doesn't support — how do you protect its key?* → Generate in software, wrap it with a hardware-resident key (envelope encryption), store only ciphertext, minimise and document the plaintext-in-memory window.
+3. *What is envelope encryption / key wrapping?* → Encrypt a data key with a master key held in hardware/KMS; store the wrapped key; unwrap only when needed.
+4. *Why are signatures better than API keys for device identity?* → No shared secret to steal; proof-of-possession proves identity without transmitting the credential.
+5. *Where should third-party API keys live in a mobile app?* → Not in the app — behind a backend proxy; the app authenticates to your backend, which holds the vendor secrets.
+
+### ⚖️ This vs That — the architecture decisions, and the roads not taken
+
+| Decision | Alternatives | Why this choice |
+|---|---|---|
+| **Hardware P-256 for device identity** | Software-stored identity key | Hardware makes the key non-exportable — it survives a compromised app. Use it wherever the platform allows. |
+| **Software Ed25519, hardware-wrapped** | Force the wallet onto a hardware key; or store Ed25519 in plaintext | Keystore can't hold Ed25519 natively; plaintext is unacceptable. Wrapping with a TEE key protects it at rest — and being honest about the signing-time exposure beats pretending it's fully hardware-bound. |
+| **No third-party keys in the APK (backend proxy)** | Ship the Sarvam/cloud key in the app (maybe obfuscated) | Any key in an APK is extractable; obfuscation only delays. Not shipping it is the only real protection. |
+| **Sign every request (proof of possession)** | A bearer API token in the app | A stolen bearer token grants impersonation; a signature proves possession without exposing the key. |
+
+**The one to defend:** *match each secret to the strongest protection the platform actually offers — and be honest where it can't.* Device identity → hardware (non-exportable); wallet key → hardware-wrapped ciphertext (with a stated exposure window); third-party keys → not on the device at all. The senior signal is refusing to claim one uniform guarantee and instead precisely naming what each key really gets.

@@ -43,3 +43,39 @@ The best decision in this subsystem was one we were forced into. A symmetric sha
 The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
 *Engineering VIGIA Mobile · Episode 3 of 5 — Previous: Episode 2. Next: Episode 4, Two identities, two key hierarchies.*
+
+---
+
+## 🎓 CS Fundamentals — study companion
+
+*This is a **Cryptography** episode focused on **key exchange** (Diffie-Hellman / ECDH), which complements the *signature* crypto from the backend series. Plus **Computer Networks** (BLE/GATT). Key-exchange questions are classic security-interview territory.*
+
+### Cryptography — key agreement & mutual authentication
+
+- **The impossibility that forced the design.** You cannot do a symmetric handshake (shared HMAC key) with a **non-exportable** hardware key — the hardware refuses to hand out the bytes both sides would need. This is the crux: a security *feature* (non-extractability) rules out symmetric crypto and forces an **asymmetric** design (which is safer anyway — no shared secret to leak).
+- **Diffie-Hellman / ECDH key exchange.** ECDH lets two parties who have only exchanged **public** keys independently compute the *same* shared secret, which never crosses the wire. Each side computes `shared = ECDH(my_private, their_public)`; the math guarantees both get the same value, and an eavesdropper who saw both public keys still can't derive it. **The session key is derived, not transmitted** — the single most important property to state.
+- **Key derivation (HKDF).** You don't use the raw ECDH output as a key; you run it through **HKDF** (HMAC-based Key Derivation Function) with a salt (both nonces) to produce a uniform, context-bound session key. KDFs turn a shared secret into good key material.
+- **Mutual authentication + nonces.** Both sides sign a **challenge** containing fresh random **nonces** (ECDSA), proving possession of their private keys *and* that this is a live exchange, not a replay. Fresh nonces per connection = replay resistance.
+- **Key pinning / trust-on-first-use.** The phone verifies the Pi's signature against a public key **pinned from a QR code** during pairing. Pinning turns "some device is signing" into "the device I already trust is signing" — the defence against a rogue peer / MITM. (Same idea as certificate pinning in TLS.)
+- **Forward secrecy (bonus).** Deriving a fresh session key per connection from ephemeral exchange means compromising one session's key doesn't expose past/future sessions — the property called **forward secrecy**.
+
+### Computer Networks
+- **BLE GATT.** Bluetooth Low Energy exposes data as **GATT** characteristics (attributes you read/write/subscribe). The handshake runs as writes/notifications over these characteristics; MTU negotiation sizes the packets. Know: BLE = low-power, short-range, characteristic-based; the handshake is an application-layer protocol *on top* of BLE's own pairing.
+
+**Interview Q&A.**
+1. *Explain Diffie-Hellman / ECDH key exchange.* → Two parties exchange public keys and each computes the same shared secret from (own private, other's public); the secret never travels; an eavesdropper can't derive it.
+2. *Why derive a session key with a KDF instead of using the DH output directly?* → Raw DH output isn't uniformly random or context-bound; HKDF produces proper key material salted with nonces.
+3. *How do nonces prevent replay in a handshake?* → Fresh random values per session make a captured handshake invalid to replay.
+4. *What is key pinning and what attack does it stop?* → Trusting a specific known public key (from QR/cert) so a rogue peer with a different key fails auth — stops MITM/impersonation.
+5. *What is forward secrecy?* → Ephemeral per-session keys so a future key compromise doesn't decrypt past sessions.
+
+### ⚖️ This vs That — the architecture decisions, and the roads not taken
+
+| Decision | Alternatives | Why this choice |
+|---|---|---|
+| **Asymmetric ECDH + ECDSA handshake** | Symmetric shared-HMAC handshake | Symmetric needs both sides to hold the same key — *impossible* with a non-exportable hardware key, and a shared secret is a liability. Asymmetric proves identity without sharing anything. |
+| **Derive the session key (never send it)** | Generate a key on one side and transmit it (encrypted) | Transmitting a key, even encrypted, puts it on the wire. ECDH derives the same key independently on both ends — it never crosses the air. |
+| **Pin the Pi's key from the QR** | Trust any device advertising the service | Without pinning, a rogue Pi passes an "authenticated-looking" handshake (MITM). Pinning binds trust to a specific key captured out-of-band. |
+| **Fresh nonces per connection** | Static challenge | Static challenges are replayable; fresh nonces give replay resistance and forward secrecy. |
+
+**The one to defend:** *symmetric was impossible, so asymmetric — and it's better.* The standout story: **a hardware key's non-extractability (a feature) makes symmetric HMAC impossible, forcing an ECDH/ECDSA design where no secret is ever shared and the session key is derived, not transmitted.** The platform constraint pointed straight at the more secure protocol.

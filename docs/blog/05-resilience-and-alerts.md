@@ -37,3 +37,45 @@ Resilience here was not a feature bolted on at the end; it was the default assum
 The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
 *Engineering VIGIA Mobile · Episode 5 of 5 — Previous: Episode 4. Back to the series overview.*
+
+---
+
+## 🎓 CS Fundamentals — study companion
+
+*This finale spans **Computer Networks** (streaming, MQTT QoS, push), **DBMS** (local persistence, partial writes), **OS** (background execution, preemption), and **System Design** (offline-first, message priority). Rich, and very interview-relevant for mobile/distributed roles.*
+
+### Computer Networks
+
+- **MQTT & QoS levels.** Hazard alerts arrive over a persistent **MQTT** connection (pub/sub). MQTT defines **QoS 0** (at-most-once, fire-and-forget), **QoS 1** (at-least-once, may duplicate → needs idempotent handling), **QoS 2** (exactly-once, heavier). Safety alerts use at-least-once and keep the session across brief drops so a queued warning isn't missed.
+- **Persistent connection vs push.** A long-lived MQTT socket gives low-latency delivery but the OS may suspend it (below). **FCM push** is the fallback that can *wake* the app. Two paths because either alone has a gap.
+- **Streaming + partial consumption.** The answer streams over SSE and is written down as it arrives (below) — networks-meets-DBMS.
+
+### DBMS / Data (local)
+- **Offline-first & local persistence.** Sessions/messages live in a local **Room** (SQLite) database, so the app works with no network — the source of truth is local, the cloud is a sync layer. This is the **offline-first** pattern (local DB + background sync), the opposite of assuming connectivity.
+- **Write-through / partial writes.** The stream persists tokens *as they arrive*, marking an interrupted message `Partial`. A mid-stream network drop loses nothing — the DB records exactly what arrived. This is **durability under failure** at the client: treat a dropped connection as ordinary data, not an exception.
+- **Eventual consistency / sync.** Local writes reconcile with the cloud when connectivity returns — the client is an eventually-consistent replica.
+
+### Operating Systems
+- **Background execution & Doze.** Android suspends background work to save battery (**Doze**); a suspended MQTT client can miss messages. FCM (a high-priority push) can wake the app — an OS-scheduling constraint solved with a second delivery path. General theme: the OS reclaims resources from background apps, so critical delivery needs an OS-sanctioned wake path.
+- **Preemption / priority.** A **critical** alert *flushes* the TTS queue and speaks immediately, preempting the current answer; lower-severity alerts queue (`QUEUE_ADD`). This is a **priority scheduling** decision encoded in *how* each message is enqueued — a deliberate priority inversion where safety outranks conversation.
+
+### System Design
+- **Graceful degradation & message hierarchy.** Persist partial answers, work offline, and rank messages so a critical warning always gets through (with a push fallback). Resilience is the *default assumption* of the data path, not an add-on.
+
+**Interview Q&A.**
+1. *Explain MQTT QoS levels.* → 0 at-most-once, 1 at-least-once (dedup/idempotent), 2 exactly-once (costly); pick per delivery guarantee vs overhead.
+2. *What is offline-first and how do you build it?* → Local DB as source of truth + background sync; UI reads local, writes queue for reconciliation; handle conflicts on reconnect.
+3. *How do you not lose a streamed response if the network drops mid-way?* → Persist incrementally (write-through) and mark partial; never buffer-only-then-save.
+4. *Why do you need both a persistent socket and push notifications?* → The socket is low-latency but the OS can suspend it; push can wake the app so critical messages still arrive.
+5. *How do you make a safety alert preempt other output?* → Priority scheduling: flush/interrupt lower-priority output (TTS queue) for the critical message; queue the rest.
+
+### ⚖️ This vs That — the architecture decisions, and the roads not taken
+
+| Decision | Alternatives | Why this choice |
+|---|---|---|
+| **Persist streamed tokens as they arrive** | Accumulate in memory, save once at the end | In a car the network drops mid-answer constantly; save-at-end loses everything received. Write-through + `Partial` status loses nothing and records the truth. |
+| **Offline-first (local DB source of truth)** | Cloud-first, require connectivity to function | The app is needed most in dead zones; a cloud-first app shows a blank screen there. Local-first works offline and syncs later. |
+| **Critical alert preempts TTS** | Finish the current sentence, then announce | A collision warning after a paragraph about road history is worse than useless; safety must outrank conversation, encoded as queue-flush vs queue-add. |
+| **MQTT (persistent) + FCM (push) dual path** | MQTT only | A suspended socket misses messages under Doze; FCM wakes the app. Redundant paths because a late safety alert is a failed one. |
+
+**The one to defend:** *treat failure as the normal case.* The senior framing: **in a moving vehicle, a dropped connection isn't an exception — it's the expected event**, so the data path is built to degrade (persist partials, work offline) and to prioritise (critical alerts preempt, with a push fallback). Resilience is the default, not a feature bolted on at the end.

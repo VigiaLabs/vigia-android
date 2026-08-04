@@ -41,3 +41,36 @@ The modules were never about tidiness for its own sake. They were about letting 
 The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
 *Engineering VIGIA Mobile · Episode 1 of 5 — Next: Episode 2, A conversation that survives the driver never touching the screen.*
+
+---
+
+## 🎓 CS Fundamentals — study companion
+
+*This is the **Software Architecture** episode — modularity, coupling & cohesion, dependency graphs, and build systems — with an **OS** note on compilation/linking. "How do you structure a large codebase?" is a staple system-design question.*
+
+### Software Architecture & Engineering
+
+- **Coupling vs cohesion.** Good architecture = **low coupling** (modules depend on each other minimally) + **high cohesion** (each module does one related thing). The strict `core`/`feature` split maximises both: features are cohesive (one screen's concern) and loosely coupled (they can't see each other).
+- **The dependency graph is a DAG.** `feature → core`, never `feature → feature` or `core → feature`. A **Directed Acyclic Graph** with no cycles: you can topologically order the build, and a change ripples only *downstream*. Cyclic dependencies (A↔B) are the enemy — they force recompilation of both and can't be reasoned about in isolation.
+- **Compile-time enforcement > convention.** A package boundary is a naming convention the compiler ignores; a *module* boundary requires a declared dependency to cross. The wall is enforced by the build tool, not by everyone's discipline at 2am. This is "make the right thing the easy thing" and "fail at compile time, not runtime."
+- **Incremental builds.** Modules give the build system a smaller unit to recompile. Change one feature → only it (and its dependents) rebuild, not the world. This is why big codebases modularise — build times.
+- **Convention over configuration / DRY.** The `build-logic` convention plugins define the platform (SDK, Compose, Hilt) *once* and apply it everywhere — the DRY principle for build config. Ten modules stay consistent because config is inherited, not copied.
+- **Dependency Injection (Hilt).** The `:app` shell wires modules together via DI — components declare what they need, a container provides it. DI decouples construction from use and makes modules independently testable (swap a real client for a fake).
+
+**Interview Q&A.**
+1. *What are coupling and cohesion, and what do you want?* → Inter-module dependence vs intra-module focus; want low coupling, high cohesion.
+2. *Why must a module dependency graph be acyclic?* → Cycles prevent independent build/reasoning/testing and force mutual recompilation; a DAG has a build order and downstream-only ripple.
+3. *Package boundary vs module boundary — which is stronger and why?* → Module: crossing it needs a declared dependency the build enforces; a package is just a name.
+4. *Why do large codebases use multi-module builds?* → Enforced boundaries + parallel work + incremental build speed.
+5. *What problem does dependency injection solve?* → Decouples object construction from use; enables testing, swapping implementations, and clear dependencies.
+
+### ⚖️ This vs That — the architecture decisions, and the roads not taken
+
+| Decision | Alternatives | Why this choice |
+|---|---|---|
+| **Multi-module (`core`/`feature`)** | Single-module app with packages | One module lets any file import any other; boundaries rot under deadline pressure and builds recompile everything. Modules enforce the wall and speed the build. |
+| **Compile-enforced boundary** | "Agree to be disciplined" with package conventions | Discipline fails at 2am; "just import it for now" always wins. A declared-dependency wall is enforced by the tool, reviewable in a diff. |
+| **Convention plugins in `build-logic`** | Copy SDK/Compose/Hilt config into each module | Copied config drifts and breaks subtly across modules; define-once-apply-everywhere keeps 10 modules consistent and makes adding a module cheap. |
+| **`feature → core` only (no `feature → feature`)** | Let features depend on each other as needed | Feature-to-feature edges create cycles and coupling; forcing shared code down into `core` keeps the graph a clean DAG. |
+
+**The one to defend:** *enforced module boundary vs discipline.* The mature answer: **architecture you rely on humans to maintain will erode; architecture the build system enforces will not.** Modules turn "please don't couple these" into "you *cannot* couple these without a visible, reviewable dependency declaration."

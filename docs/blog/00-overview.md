@@ -33,3 +33,20 @@ Looking back, the same instinct shows up in every one of these decisions. Design
 None of these are exotic on their own. The interesting part was deciding, for software that rides in a moving car, where to spend engineering effort on resilience and trust that a stationary app would never need.
 
 The full app is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android). This is part of an ongoing build series.
+
+---
+
+## 🎓 CS Fundamentals — study companion
+
+*This overview frames a mobile client that fuses **OS**, **Computer Networks**, **Security**, and **Software Architecture**. The episodes go deep; read this before mobile/systems interviews.*
+
+### System Design (mobile client)
+- **Three-tier fusion on one device.** The app sits between a Pi edge node (below, over Bluetooth) and a cloud backend (above, over HTTPS/MQTT), fusing both in real time. The design constraint that shapes everything: **the environment is adversarial** — the network drops, hands are busy, the Bluetooth peer might lie, the phone could be lost. Each episode hardens one of those.
+- **Client-side responsibilities.** Unlike a server, a mobile client must handle intermittent connectivity, constrained battery/CPU, OS lifecycle (backgrounding), and on-device secrets — a distinct discipline from backend engineering.
+
+### ⚖️ This vs That — the guiding principle
+| Decision | Alternatives | Why this choice |
+|---|---|---|
+| **Design for the adversarial environment** | Design for the demo (good network, hands free, honest peer) | A driving copilot lives in the worst case: dropped signal, eyes on the road, untrusted hardware. Building for the happy path means failing exactly when it matters. |
+
+**The one to defend:** *build for the failure modes, not the demo.* Every subsystem — modules for parallel dev, a self-closing voice loop, a no-shared-secret handshake, hardware-backed keys, resilient streaming — is one instance of assuming the hostile case and degrading gracefully.

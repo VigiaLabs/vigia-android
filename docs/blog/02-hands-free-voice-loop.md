@@ -48,3 +48,40 @@ A hands-free copilot is not a normal assistant with the buttons hidden. It is a 
 The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
 *Engineering VIGIA Mobile · Episode 2 of 5 — Previous: Episode 1. Next: Episode 3, Why the phone and the Pi never share a secret.*
+
+---
+
+## 🎓 CS Fundamentals — study companion
+
+*This is an **Operating Systems** (state machines, concurrency, async) + **Computer Networks** (streaming) episode, with real-time **System Design**. Finite state machines and async event loops are common interview ground.*
+
+### Operating Systems / Concurrency
+
+- **Finite State Machine (FSM).** The voice loop is an explicit FSM: `idle → listening → processing → speaking → (barge-in) → listening`. Modelling interactive/async logic as an FSM makes illegal transitions impossible and races reason-about-able. Any time you have "modes" that respond differently to events, reach for an FSM.
+- **Event-driven / callback model.** VAD emits events (speech-start, utterance-complete); the pipeline reacts. TTS completion fires a callback that reopens the mic. This is the **event loop / observer pattern** — the same model as UI frameworks and Node.js.
+- **Concurrency & cancellation.** The search runs on a background coroutine; a barge-in must **cancel** it cleanly and start over. Structured concurrency (scoped coroutines that cancel together) prevents leaked work — cancellation correctness is a genuinely hard concurrency topic.
+- **The self-reopening invariant.** "As long as the overlay is open, the mic always comes back" is a **liveness** property (something good eventually happens). Its dual, **safety** (nothing bad happens — e.g., two mic sessions at once), is enforced by the FSM. Liveness + safety is the formal way to reason about concurrent systems.
+
+### Computer Networks
+- **Server-Sent Events (SSE) streaming.** The answer streams token-by-token over a long-lived HTTP connection (SSE) rather than one big response. Streaming reduces *perceived latency* (first token fast) and enables incremental TTS. Compare: SSE (server→client, one-way, over HTTP) vs WebSockets (bidirectional) vs long-polling.
+- **Partial results & backpressure.** Consuming a stream means handling partial data and a producer faster than the consumer (TTS) — buffering and ordering matter.
+
+### System Design (real-time interaction)
+- **Barge-in / preemption.** Starting the barge-in monitor *before* the first TTS syllable so even the opening word is interruptible is a **preemption** design — the user's input can always preempt the system's output. The brief post-barge-in pause avoids the system's own audio being mistaken for the user (feedback/echo rejection).
+
+**Interview Q&A.**
+1. *When would you model logic as a finite state machine?* → When behaviour depends on mode and you must forbid illegal transitions and reason about async events (UI, protocols, game logic).
+2. *SSE vs WebSockets vs long-polling?* → One-way server push over HTTP vs full-duplex vs repeated requests; SSE for streaming responses, WS for interactive bidirectional.
+3. *How do you cancel in-flight async work correctly?* → Structured concurrency / cancellation tokens; ensure resources release and no orphaned callbacks fire on stale state.
+4. *Safety vs liveness properties?* → "Nothing bad ever happens" vs "something good eventually happens"; concurrent systems need both.
+
+### ⚖️ This vs That — the architecture decisions, and the roads not taken
+
+| Decision | Alternatives | Why this choice |
+|---|---|---|
+| **Voice-activity detection (hands-free)** | Push-to-talk button | A button is the exact tap a driver can't make. VAD lets them just talk; the cost is tuning against road noise. |
+| **Mic auto-reopens; failures reopen too** | Return to idle and wait for a tap after each turn | A hands-free loop that can silently end is useless — the driver can't restart it without looking. The invariant "mic always comes back" is non-negotiable. |
+| **Barge-in monitor starts before first syllable** | Allow interruption only after the answer starts / not at all | An assistant you can't interrupt is worse in a car; early monitoring makes even the first word interruptible. |
+| **SSE streaming + per-step TTS** | Wait for the full answer, then speak | Waiting feels broken; streaming speaks as it arrives, cutting perceived latency to near-zero. |
+
+**The one to defend:** *the self-closing loop (FSM + auto-reopen).* The insight isn't the speech tech; it's that **a hands-free interface must be a loop that closes itself and can never silently stop** — modelled as an explicit FSM with a liveness invariant (mic always returns) and preemptible output (barge-in). Treating every failure as "keep listening" rather than "surface an error" is what makes it usable at 80 km/h.
