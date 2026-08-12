@@ -54,6 +54,23 @@ Production readiness is evaluated across four properties:
 - Demo behaviour is selected at compile time and cannot be reached from a production runtime failure.
 - Every production-impacting change is gated by CI and every high-risk path has an observable rollback.
 
+### 0.1 Implementation checkpoint — 2026-08-13
+
+The first production-hardening tranche is implemented on `master` (`8852d49`). It covers:
+
+- fail-closed production authentication and startup configuration validation;
+- explicit payout disablement in production and intent-vs-settlement payment states;
+- typed claim failures with no offline/local-success fallback, plus exact QR-MAC CDM filtering;
+- bounded BLE scan/bond/MTU operations with cancellation propagation and service-visible failures;
+- Room migrations/schema export and a durable MQTT/FCM alert inbox;
+- explicit location/telemetry availability flags instead of treating `(0, 0)`/zero telemetry as real;
+- backup/device-transfer restrictions, redacted network logs, finite HTTP call bounds, and CI compile/test/lint gates.
+
+This is an implementation checkpoint, not a release declaration. The device-wallet claim remains
+blocked until the Android/Pi/server binding-challenge protocol supplies a real `deviceSig`; MQTT
+client authentication, maintained map/tile service, observability, workflow extraction, release
+signing, and the remaining migration/security tests remain planned work.
+
 ---
 
 ## 1. Current-state assessment
