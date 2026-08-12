@@ -18,7 +18,15 @@
 
 ---
 
-VIGIA Mobile is the Android companion for the VIGIA road-intelligence edge node: it pairs with the Pi 5 Blackbox over authenticated BLE GATT, streams live telemetry context into a Sarvam-powered voice copilot, surfaces real-time MQTT hazard alerts with text-to-speech, and manages the on-device DePIN rewards wallet backed by an Android Keystore TEE-wrapped Ed25519 keypair with Stripe Connect cash-out.
+VIGIA Mobile is an advanced Android prototype for a road-intelligence edge node. The repository contains
+BLE/GATT pairing, sensor context, a voice copilot, SSE search, MQTT/FCM alert receivers, maps and a
+Keystore-wrapped Ed25519 rewards wallet. Several production-critical paths are partial or unsafe under
+failure; Stripe cash-out and end-to-end ownership/alert guarantees are **not production-ready**.
+
+> **Production status (2026-08-12): not a release candidate.** Authentication/claim fail-open paths, BLE
+> lifecycle, context truth, payment settlement, durable alerts, Room migrations/backups, AWS IoT client auth,
+> maps infrastructure, CI/observability and release engineering are tracked in the corrected
+> [Architecture Hardening Master Spec](ARCHITECTURE_HARDENING_SPEC.md).
 
 ---
 
@@ -52,15 +60,25 @@ VIGIA Mobile is the Android companion for the VIGIA road-intelligence edge node:
 
 ## Why This App Stands Out
 
-**Multi-module clean architecture.** Every concern lives in its own Gradle module with clearly typed interfaces at the boundary — no module leaks implementation details upward. Convention plugins in `build-logic/` enforce a single source of truth for `compileSdk`, `minSdk`, `targetSdk`, and Hilt wiring across all nine modules.
+**Multi-module foundation.** Ten application modules share convention plugins and a version catalogue.
+The target is feature leaves over owned core APIs, but `feature:copilot` currently depends directly on
+`feature:maps` and `feature:pairing`, and `core:sensor` is an over-broad integration module.
 
-**TEE-backed crypto wallet.** The Ed25519 device identity key is generated inside the Android Keystore TEE. Its PKCS8 bytes are encrypted once with a 256-bit AES-GCM key that never leaves the secure enclave, then stored in SharedPreferences. Every balance fetch and every telemetry upload is signed by this key, so the backend can verify device identity without any shared secret in the APK.
+**Keystore-wrapped software wallet.** The Ed25519 keypair is generated in the app process. Its PKCS#8
+private encoding is AES-GCM-encrypted by an Android Keystore key and stored in SharedPreferences; signing
+decrypts/reconstructs the private key in app memory. This protects the stored blob but is not a TEE-resident,
+non-exportable Ed25519 signing key. Hardware security level is not currently measured.
 
 **On-device voice copilot.** A full conversational loop runs entirely through the app: live microphone → Sarvam `saarika:v2` STT → VIGIASearch SSE streaming → Sarvam `bulbul:v1` TTS → AudioTrack playback. The mic reopens automatically after each AI response, keeping the driver in a hands-free dialogue that persists across turns.
 
-**Real-time MQTT hazard alerts.** The app subscribes to AWS IoT Core over a persistent TLS MQTT connection (Eclipse Paho v3, QoS 1, `cleanSession=false`). CRITICAL alerts pre-empt ongoing TTS; HIGH alerts change the AI orb to alert state. FCM provides a fallback delivery path when the device enters Doze mode.
+**Best-effort alert prototype.** MQTT/FCM receivers and TTS priority exist, but normal AWS IoT client
+authentication is not implemented, the MQTT client ID is random despite persistent-session intent, and FCM
+injects into an in-memory flow rather than a durable inbox/system notification. Production requires stable
+event IDs, Room dedupe, gap sync and measured delivery.
 
-**Offline-first chat history.** All sessions and messages are persisted in Room. The search stream writes partial tokens to the DB on cancellation so nothing is lost on network drop. Navigation and deep-linking across the two main destinations (Copilot, Maps) are handled by a single `NavHost` in `CopilotRoute`.
+**Partially offline chat history.** Sessions/messages are persisted in Room and interrupted answers retain
+partial state. This narrows loss on network interruption; it is not a guarantee against every device/storage
+failure. Wallet, hazard and reward views are not yet durable offline read models.
 
 ---
 
@@ -127,7 +145,10 @@ The cloud backend validates Ed25519-signed telemetry, issues DePIN reward micro-
     └─────────────────────────────────────────────────┘
 ```
 
-All feature modules depend only on `core/*` modules — never on each other. The `:app` module ties everything together and provides build-config secrets (`VIGIA_API_BASE_URL`, `MQTT_BROKER_URI`, `STRIPE_PUBLISHABLE_KEY`, `BLACKBOX_MAC`) through named Hilt bindings.
+The target is for feature implementations not to depend on one another. Currently `feature:copilot` depends
+on `feature:maps` and `feature:pairing`; `:app` remains the composition root. Build configuration includes
+public client configuration and endpoints as well as values that must be supplied by CI; required prod values
+are not yet fail-fast validated.
 
 ---
 
@@ -152,7 +173,10 @@ All feature modules depend only on `core/*` modules — never on each other. The
 ## Key Features
 
 ### DePIN Rewards Wallet
-The wallet identity is an Ed25519 keypair generated on first launch inside the Android Keystore TEE. The private key is AES-256-GCM encrypted and stored in SharedPreferences; the AES wrapping key never leaves the secure enclave. On provisioning, the app POSTs a proof-of-possession signature over `"VIGIA-REGISTER:<pubkey>"` to `/register-device`. Balance is refreshed every 60 seconds by GETting `/rewards-balance` with an `X-Wallet-Signature` ownership proof header. VGA is denominated in micro-VGA (1 VGA = 1,000,000 micro-VGA).
+The wallet identity is an Ed25519 keypair generated in software on first launch. Its private encoding is
+AES-GCM-wrapped by an Android Keystore key and stored in SharedPreferences; it is decrypted into app memory
+for signing. Registration/balance proof code exists, but freshness, replay, concurrency, backup exclusion,
+measured Keystore security level and end-to-end backend enforcement remain production hardening work.
 
 ### Ed25519 Telemetry Signing with Frame SHA-256
 Every hazard event POSTed to the backend is signed. The payload format is:
@@ -176,8 +200,11 @@ Queries are enriched with live GPS coordinates, velocity, RRI score, and a 256-D
 ### MQTT Hazard Alerts with TTS
 A persistent Eclipse Paho MQTT connection subscribes to `vigia/alerts/{userId}` (QoS 1, `cleanSession=false`). On message receipt, the `HazardAlert` is emitted over a `SharedFlow`, the severity is evaluated, and `TtsManager.speak()` is called with `QUEUE_FLUSH` for CRITICAL or `QUEUE_ADD` for others. FCM is wired as a secondary delivery path for Doze-mode wakeup via `VigiaFcmReceiver`.
 
-### Stripe Connect Payout and Cash-Out
-`StripePayRepositoryImpl` orchestrates onboarding (`/stripe/connect-onboarding`), payment-intent creation (`/stripe/create-payment-intent`), and Financial Connections (`/stripe/financial-connections-session`). Before any Stripe call, the ViewModel computes a fresh wallet ownership proof and passes it as HTTP headers so the backend can verify the payout request without a separate auth token.
+### Stripe Connect Payout and Cash-Out — incomplete; disable in production
+Repository endpoints and UI components exist, but the current code reports a client secret as
+`PaymentSucceeded`, stores mutable proof data on a singleton and does not wire a complete settlement flow.
+Production requires server-authoritative quotes/balance, persisted idempotency, verified Stripe webhooks,
+processing/reversal states and reconciliation.
 
 ### BLE GATT Link to the Edge Node
 `BleLinkManager` drives the full connection pipeline in order: LE scan by MAC → GATT connect → MTU 517 negotiation + 2M PHY → LE Secure Connections bond → ECDH P-256 mutual handshake → stream-mode confirmation (REQUEST\_256D opcode) → TELEMETRY\_CHAR notifications. The session key is derived via `HKDF-SHA256(ECDH(Pi_priv, Phone_pub), salt=nonce_pi||nonce_phone, info="vigia-ble-v1")`.
@@ -188,7 +215,7 @@ A persistent Eclipse Paho MQTT connection subscribes to `vigia/alerts/{userId}` 
 
 | Layer | Mechanism |
 |---|---|
-| Device identity key | Ed25519 keypair; private key never leaves the Android Keystore TEE |
+| Wallet signing key | Software Ed25519; PKCS#8 encrypted at rest by an Android Keystore AES key; private key enters app memory while signing |
 | Private key at rest | AES-256-GCM encrypted ciphertext + IV in SharedPreferences; wrapping key in AndroidKeyStore |
 | BLE session key | HKDF-SHA256 over ECDH-P256 shared secret; per-connection nonces prevent replay |
 | BLE mutual auth | Pi sends CHALLENGE with ECDSA-signed nonce; phone verifies against pinned Pi public key (from QR) and replies with its own ECDSA-signed RESPONSE; Pi sends HMAC-SHA256 CONFIRM |

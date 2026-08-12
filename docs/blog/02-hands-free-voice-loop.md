@@ -28,15 +28,28 @@ Before the voice-specific parts, here's the machinery underneath, because it's t
 
 State flows **down** (ViewModel → Composable); events flow **up** (Composable calls `viewModel.onXxx()`). That's Unidirectional Data Flow, and it's the whole reason a six-stage voice loop stays debuggable: there is exactly one place the state changes.
 
-**Why `StateFlow` and `collectAsStateWithLifecycle`.** `StateFlow` is a coroutine primitive: an always-has-a-value observable stream. The Composable subscribes with `collectAsStateWithLifecycle()`, which — crucially — *stops collecting when the screen isn't visible*, so a backgrounded copilot doesn't keep doing UI work. This is why we use it over the older `LiveData` (Android-only, less composable) or a raw callback (no lifecycle-awareness). When the ViewModel sets `_uiState.value = Speaking(...)`, Compose recomposes only the affected UI.
+**Why `StateFlow` and `collectAsStateWithLifecycle`.** `StateFlow` is a hot coroutine stream that always
+has a current value. The Composable subscribes with `collectAsStateWithLifecycle()`, which stops the **UI
+collection** below the selected lifecycle state. That does not automatically stop work launched in the
+ViewModel or a service; producer lifetime must be designed separately with sharing policy, cancellation
+and resource ownership. When state changes, Compose schedules recomposition for scopes that read it;
+“only the affected UI” is something to verify, not assume.
 
-**Why the whole thing is coroutines.** Every stage — recording, an STT network call, the SSE stream, TTS playback — is asynchronous and must not block the main thread (block it for >5s and Android kills you with an ANR). Coroutines let each stage be written as straight-line `suspend` code while running off the main thread, and they give us the one property this feature lives or dies on: **structured concurrency**.
+**Why the whole thing is coroutines.** Every stage—recording, an STT network call, the SSE stream and TTS
+playback—is asynchronous and must not block the main thread. ANR thresholds depend on the blocked component
+and situation; the rule is to keep main-thread work bounded and measure stalls. Coroutines make asynchronous
+code sequential-looking, but `suspend` does not itself move work off-main: dispatcher choice and whether the
+underlying API blocks still matter.
 
 ## The state machine, made explicit
 
 The view-model holds an explicit state — listening, processing, speaking, paused, barge-in, idle — because a voice loop with no visible state machine becomes impossible to reason about the first time two stages race.
 
-Modelling it as a **finite state machine (FSM)** is the key move. An FSM is a set of states plus the legal transitions between them; encoding it makes *illegal* transitions (two microphone sessions at once, speaking while still recording) unrepresentable. Any time a feature has "modes" that respond differently to the same event, an FSM is the right tool — this is as true in an interview answer as it is in the code.
+Modelling it as a **finite state machine (FSM)** is the right target. An FSM is a set of states plus legal
+transitions. The current implementation has state-shaped UI types but still coordinates a large amount of
+voice/search logic inside an approximately 1,100-line ViewModel; that alone does not make illegal transitions
+unrepresentable. The hardening step is a transition reducer with one owner, explicit effects and exhaustive
+tests for races such as barge-in versus SSE completion and TTS completion versus pause.
 
 ## Why voice-activity detection instead of push-to-talk
 
@@ -60,21 +73,47 @@ The subtle part is *when* the monitor starts. We start it before the first sylla
 
 ## Why the answer streams: SSE over a blocking request
 
-The answer streams back token-by-token over **Server-Sent Events (SSE)** — a long-lived HTTP response the server writes to incrementally — consumed with raw **OkHttp** (we drop below Retrofit here because we need the raw response body as a stream, not a parsed object). The alternative, a single blocking request that returns the whole answer at the end, would feel broken: several seconds of silence, then a wall of speech. Streaming lets TTS start on the first sentence while the rest is still being generated, cutting *perceived* latency to near-zero.
+The answer streams back token-by-token over **Server-Sent Events (SSE)**—a long-lived HTTP response the
+server writes incrementally—consumed with raw **OkHttp**. A single response returned only at the end would
+produce several seconds of silence. Streaming lets TTS start on an early complete sentence while the rest
+is generated, reducing time-to-first-useful-audio. It does not make latency near-zero: connection setup,
+server first token, sentence buffering and TTS startup remain measurable stages.
 
-Know the neighbours for interviews: **SSE** is one-way server→client over plain HTTP (ideal here); **WebSockets** are full-duplex (overkill for a one-way answer); **long-polling** is repeated requests (legacy). SSE also means handling *partial* data and a producer (the network) that can outrun the consumer (TTS) — buffering and ordering matter.
+Know the neighbours for interviews: **SSE** is one-way server→client over an HTTP response;
+**WebSockets** are full-duplex; **long-polling** uses repeated requests. The current client uses an
+unlimited channel and an unbounded call duration, so the production fix is not just “SSE”: bound event,
+line, answer and stream sizes; define idle/total deadlines; cancel on lifecycle/user action; and batch UI
+text updates. Backpressure is a correctness and denial-of-service concern, not only a performance detail.
 
 ## Grounding every question in where the car actually is
 
-One more thing happens before a transcript leaves the phone: it's fused with live context. The app continuously aggregates GPS position, speed, the road-roughness reading from the Pi, and any hazards ahead, and attaches that to the query. So "is this road safe?" is never answered in the abstract — the backend receives the question *and* the coordinates, speed, and roughness for the stretch the car is on. The voice loop is the interface; context fusion is what makes the answers worth listening to.
+One more thing is intended before a transcript leaves the phone: fusion with location and sensor context.
+The audit found a dangerous representation bug here. The aggregator seeds location at `0,0` and sensor
+values at zero, and it checks location permission only when collection starts. Absence can therefore look
+like a real measurement. The production model must represent `Available(value, capturedAt, accuracy,
+source)` versus `Unavailable(reason)`, observe permission changes, enforce freshness budgets and omit
+unavailable fields. Grounding is valuable only when the context is truthful.
 
 ## The production edge: this must survive backgrounding
 
-A from-zero note on the part a demo skips. A voice loop that keeps running while the app isn't foregrounded needs a **foreground service** with an ongoing notification — that's the OS contract for "I'm doing user-visible work in the background," and without it Android will suspend your microphone and coroutines to save battery. Getting the audio-focus handshake right (ducking navigation prompts, releasing on barge-in) and honouring the lifecycle is the difference between a demo that works while you stare at it and a copilot that survives a real drive. In the hardening plan this feature's business logic (the loop orchestration) also moves out of the ViewModel into a testable UseCase, so the FSM can be unit-tested with fake STT/TTS.
+A from-zero note on the part a demo skips: this is not currently proven as a background-safe voice
+product. Android foreground-service, microphone, while-in-use permission and background-start rules vary
+by API and start context. An ongoing notification is necessary when a valid microphone foreground service
+is allowed, but it does not grant unlimited background execution. The product must define whether a voice
+session ends on background, remains explicitly user-started in an allowed service, or degrades to
+notifications. Audio focus, navigation prompts, calls, Bluetooth audio, permission revocation and
+service/process death need real-device tests. The workflow can be extracted for testability without
+assuming every repository call needs a use-case class.
 
 ## Takeaway
 
-A hands-free copilot isn't a normal assistant with the buttons hidden. It's a loop that has to close itself — detect speech without a tap, speak the answer, reopen the mic, stay interruptible throughout — while treating every failure as a reason to keep listening rather than to stop and ask for help. The hard parts weren't the speech tech; they were the **finite state machine** that sequences the stages, the **structured concurrency** that makes barge-in cancel cleanly, and the single rule that the microphone always comes back.
+A hands-free copilot isn't a normal assistant with the buttons hidden. It is a safety-relevant concurrent
+workflow with explicit stop conditions. “Always reopen the microphone” is not universally correct after
+permission loss, background restriction, a phone call, repeated failure or user stop. The stronger invariant
+is: **after every transition the system reaches a visible, explainable state, owns at most one recorder,
+TTS session and network stream, and either resumes under policy or stops safely without an orphaned
+resource.** The prototype proves useful pieces; the transition table, bounded streaming and lifecycle/device
+matrix are the production work.
 
 The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
@@ -87,11 +126,14 @@ The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/Vigi
 *This is an **Operating Systems** (state machines, concurrency, async, process lifecycle) + **Computer Networks** (streaming) episode, with real-time **System Design** and the Android reactive-UI stack. FSMs, async event loops, and cancellation are common interview ground.*
 
 ### Operating Systems / Concurrency
-- **Finite State Machine.** The voice loop is an explicit FSM: `idle → listening → processing → speaking → (barge-in) → listening`. Modelling async logic as an FSM makes illegal transitions unrepresentable. Reach for it whenever behaviour depends on "mode."
+- **Finite State Machine.** Target: `idle → listening → processing → speaking → (barge-in) → listening`,
+  plus pause/permission/background/error/stop. A state enum alone is not an FSM; centralised transition
+  validation and effect ownership make illegal transitions testable or unrepresentable.
 - **Event-driven / observer model.** VAD emits events; the pipeline reacts; TTS completion fires a callback that reopens the mic. This is the event loop / observer pattern — the same model as UI frameworks and Node.js.
 - **Structured concurrency & cancellation.** The search runs on a scoped coroutine; barge-in must cancel it cleanly and start over. Scoped coroutines cancel together (cancel the parent → children stop), preventing leaked work and stale-state callbacks. Cancellation correctness is a genuinely hard topic.
 - **Safety + liveness.** "As long as the overlay is open, the mic always comes back" is a **liveness** property (something good eventually happens); its dual **safety** (never two mic sessions at once) is enforced by the FSM. Concurrent systems need both.
-- **ANR / main thread.** Blocking the main thread >5s triggers an ANR; coroutines run work off-main so the UI stays responsive.
+- **ANR / main thread.** ANRs have component/context-specific thresholds. Coroutines do not automatically
+  move blocking work off-main; dispatchers, adapters and measurement determine responsiveness.
 - **Process lifecycle.** A background voice loop needs a foreground service; the OS suspends background work (Doze) otherwise.
 
 ### Android reactive UI (name these)
@@ -113,7 +155,7 @@ The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/Vigi
 | Decision | Alternatives | Why this choice |
 |---|---|---|
 | **Voice-activity detection (hands-free)** | Push-to-talk button | A button is the exact tap a driver can't make; VAD lets them just talk (cost: tuning against road noise). |
-| **Mic auto-reopens; failures reopen too** | Return to idle after each turn | A hands-free loop that can silently end is useless; "mic always comes back" is non-negotiable. |
+| **Policy-controlled resume** | Always reopen; always return idle | Resume after normal/transient outcomes, but stop safely on explicit stop, permission/background policy, call/audio-focus loss or repeated failure. |
 | **Barge-in starts before first syllable** | Interrupt only after the answer starts / not at all | An uninterruptible assistant is worse in a car; early monitoring makes even the first word interruptible. |
 | **Coroutines + structured concurrency** | Raw threads + callbacks | Cancellation is the hard part; scoped coroutines cancel cleanly and avoid stale-state callbacks. |
 | **SSE streaming + per-step TTS** | Wait for the full answer, then speak | Waiting feels broken; streaming speaks as it arrives, cutting perceived latency to near-zero. |
