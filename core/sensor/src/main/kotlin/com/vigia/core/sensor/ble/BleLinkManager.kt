@@ -23,6 +23,7 @@ import com.vigia.core.sensor.keystore.KeystoreManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -30,7 +31,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.SecureRandom
 import java.util.UUID
 import javax.inject.Inject
@@ -170,9 +173,23 @@ class BleLinkManager @Inject constructor(
             enableTelemetry(gatt)
             enableAlertChar(gatt)
             _linkState.value = BleLinkState.Bound
+        } catch (e: TimeoutCancellationException) {
+            _linkState.value = BleLinkState.Error(BleLinkError.CONNECTION_TIMEOUT)
+            disconnect()
+            throw BleStepException(BleLinkError.CONNECTION_TIMEOUT)
         } catch (e: BleStepException) {
             _linkState.value = BleLinkState.Error(e.error)
             disconnect()
+            throw e
+        } catch (e: CancellationException) {
+            // Caller cancellation must remain cooperative and must not be turned
+            // into a retryable hardware failure.
+            disconnect()
+            throw e
+        } catch (e: Exception) {
+            _linkState.value = BleLinkState.Error(BleLinkError.GATT_ERROR)
+            disconnect()
+            throw e
         }
     }
 
@@ -221,7 +238,7 @@ class BleLinkManager @Inject constructor(
         val filter   = ScanFilter.Builder().setDeviceAddress(address).build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
 
-        return suspendCancellableCoroutine { cont ->
+        return withTimeout(SCAN_TIMEOUT_MS) { suspendCancellableCoroutine { cont ->
             val cb = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) {
                     scanner.stopScan(this)
@@ -231,9 +248,13 @@ class BleLinkManager @Inject constructor(
                     cont.resumeWithException(BleStepException(BleLinkError.SCAN_FAILED))
                 }
             }
-            scanner.startScan(listOf(filter), settings, cb)
+            try {
+                scanner.startScan(listOf(filter), settings, cb)
+            } catch (e: Exception) {
+                cont.resumeWithException(BleStepException(BleLinkError.SCAN_FAILED))
+            }
             cont.invokeOnCancellation { scanner.stopScan(cb) }
-        }
+        } }
     }
 
     // ── Step 2 — GATT connect ─────────────────────────────────────────────────
@@ -255,7 +276,9 @@ class BleLinkManager @Inject constructor(
     private suspend fun negotiateMtuAndPhy(gatt: BluetoothGatt) {
         // Request ATT MTU 517 — handles 512-D frame (2054 bytes) via ATT fragmentation.
         gatt.requestMtu(GattConstants.TARGET_MTU)
-        awaitEvent(5_000) { it is GattEvent.MtuChanged }
+        withTimeoutOrNull(MTU_TIMEOUT_MS) {
+            awaitEvent(MTU_TIMEOUT_MS) { it is GattEvent.MtuChanged }
+        }
         // Non-fatal: proceed even if MTU stays at 23 (frame delivery still works, just fragmented).
 
         // Prefer LE 2M PHY for throughput (~175 kB/s ceiling vs ~125 kB/s on 1M).
@@ -273,12 +296,15 @@ class BleLinkManager @Inject constructor(
         _linkState.value = BleLinkState.Pairing
         if (device.bondState == BluetoothDevice.BOND_BONDED) return
 
-        val bonded = suspendCancellableCoroutine { cont ->
+        val bonded = withTimeoutOrNull(BOND_TIMEOUT_MS) { suspendCancellableCoroutine { cont ->
             val receiver = buildBondReceiver(device, cont)
             context.registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
             cont.invokeOnCancellation { runCatching { context.unregisterReceiver(receiver) } }
-            device.createBond()
-        }
+            if (!device.createBond()) {
+                runCatching { context.unregisterReceiver(receiver) }
+                cont.resumeSafely(false)
+            }
+        } } ?: false
         if (!bonded) throw BleStepException(BleLinkError.PAIRING_FAILED)
     }
 
@@ -450,4 +476,10 @@ class BleLinkManager @Inject constructor(
     }
 
     private class BleStepException(val error: BleLinkError) : Exception(error.name)
+
+    private companion object {
+        const val SCAN_TIMEOUT_MS = 15_000L
+        const val MTU_TIMEOUT_MS = 5_000L
+        const val BOND_TIMEOUT_MS = 30_000L
+    }
 }

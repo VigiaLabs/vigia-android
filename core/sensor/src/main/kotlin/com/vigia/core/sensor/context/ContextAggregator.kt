@@ -28,8 +28,8 @@ import javax.inject.Singleton
  * live [VigiaSearchContext] stream ready for the VIGIASearch copilot query.
  *
  * [searchContext] uses [combine] so it emits only when BOTH sources have provided at least one
- * value. [onStart] pre-seeds each source with a safe default so combine fires immediately on
- * first real update from either side — preventing a deadlock when BLE is disconnected.
+ * value. Unavailable sources are represented explicitly with availability flags; fabricated
+ * coordinates/telemetry must never be interpreted as real observations by the API or ADAS.
  *
  * The caller (CopilotViewModel) copies the emitted context with `copy(queryText = userInput)`
  * before passing it to [VigiaSearchClient.search].
@@ -52,6 +52,7 @@ class ContextAggregator @Inject constructor(
         bearingDeg     = 0f,
         velocityMs     = 0f,
         timestampMs    = System.currentTimeMillis(),
+        isAvailable    = false,
     )
 
     private val defaultFrame = BleDataStreamer.TelemetryFrame(
@@ -61,6 +62,7 @@ class ContextAggregator @Inject constructor(
             data              = FloatArray(256),
             originTimestampMs = 0L,
         ),
+        isAvailable         = false,
     )
 
     private fun hasLocationPermission() =
@@ -108,6 +110,8 @@ class ContextAggregator @Inject constructor(
             velocityMs          = location.velocityMs,
             rriScore            = frame.rriScore,
             spatialLatentVector = frame.spatialLatentVector,
+            locationAvailable   = location.isAvailable,
+            telemetryAvailable  = frame.isAvailable,
         )
     }
 

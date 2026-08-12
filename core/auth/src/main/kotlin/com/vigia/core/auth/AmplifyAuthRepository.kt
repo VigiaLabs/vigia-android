@@ -24,8 +24,8 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * Real Cognito User Pools backend via Amplify Auth. Bound only when Amplify has
- * been configured at startup ([AmplifyInitializer]); otherwise the app binds
- * [DemoAuthRepository].
+ * been configured at startup ([AmplifyInitializer]). Production configuration
+ * failures are handled by [MisconfiguredAuthRepository] and never fall back to demo auth.
  *
  * Email/password and Hosted-UI Google federation are both routed here. Cognito
  * groups (for future role gating) can be read from the access token's

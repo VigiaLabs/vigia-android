@@ -55,8 +55,8 @@ abstract class NetworkModule {
          *
          * Read timeout is 120s to accommodate long VIGIASearch LangGraph runs.
          * The ALB idle timeout is configured to 300s server-side.
-         * callTimeout is intentionally 0 (no global cap) — individual call sites
-         * cancel via coroutine scope instead.
+         * A finite call timeout bounds stuck sockets even when a coroutine owner is
+         * lost. SSE callers still have a 120s idle/read timeout and can cancel earlier.
          */
         /**
          * Plain OkHttpClient — no auth header. Used by Sarvam STT/TTS only.
@@ -66,6 +66,8 @@ abstract class NetworkModule {
         @Singleton
         fun provideOkHttpClient(): OkHttpClient {
             val logging = HttpLoggingInterceptor().apply {
+                redactHeader("Authorization")
+                redactHeader("X-Wallet-Signature")
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                         else HttpLoggingInterceptor.Level.NONE
             }
@@ -73,7 +75,7 @@ abstract class NetworkModule {
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(0, TimeUnit.SECONDS)
+                .callTimeout(180, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
                 .addInterceptor(logging)
                 .build()
@@ -95,6 +97,9 @@ abstract class NetworkModule {
             authInterceptor: VigiaAuthInterceptor,
         ): OkHttpClient {
             val logging = HttpLoggingInterceptor().apply {
+                // Never print Cognito/JWT or payment proof material, even in debug builds.
+                redactHeader("Authorization")
+                redactHeader("X-Wallet-Signature")
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                         else HttpLoggingInterceptor.Level.NONE
             }
@@ -102,9 +107,9 @@ abstract class NetworkModule {
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(0, TimeUnit.SECONDS)
+                .callTimeout(180, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
-                .addInterceptor(authInterceptor)  // auth before logging so token appears in debug logs
+                .addInterceptor(authInterceptor)
                 .addInterceptor(logging)
                 .build()
         }

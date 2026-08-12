@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -9,9 +8,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Wallet keys, pairing identity and auth/session state are device-bound.
+         Do not copy them to another device or cloud restore target. -->
     <application
         android:name=".VigiaApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -31,18 +32,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Amplify Hosted-UI redirect target for federated (Google) sign-in.
-             Scheme matches the Cognito app-client callback URI (vigia://callback/). -->
-        <activity
-            android:name="com.amplifyframework.auth.cognito.activities.HostedUIRedirectActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="vigia" />
-            </intent-filter>
-        </activity>
     </application>
 
 </manifest>

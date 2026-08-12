@@ -10,4 +10,6 @@ data class VigiaSearchContext(
     val responseLanguage: String = "en-IN",
     val conversationHistory: List<ConversationTurn> = emptyList(),
     val routeAheadHazards: List<RouteAheadHazard> = emptyList(),
+    val locationAvailable: Boolean = location.isAvailable,
+    val telemetryAvailable: Boolean = true,
 )

@@ -9,10 +9,12 @@ package com.vigia.core.network.stripe
  */
 sealed interface PayoutStatus {
     data object Idle : PayoutStatus
+    data object Disabled : PayoutStatus
     data object AwaitingOnboarding : PayoutStatus
     data object OnboardingInProgress : PayoutStatus
     data class  OnboardingComplete(val accountId: String) : PayoutStatus
     data class  PaymentPending(val amountCents: Long, val currency: String) : PayoutStatus
-    data class  PaymentSucceeded(val chargeId: String) : PayoutStatus
+    /** A payment intent exists; settlement is not confirmed yet. */
+    data class  PaymentIntentCreated(val clientSecret: String) : PayoutStatus
     data class  Failed(val userMessage: String) : PayoutStatus
 }

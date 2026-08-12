@@ -10,6 +10,7 @@ android {
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:data"))
 
     // Network stack
     implementation(libs.bundles.networking)

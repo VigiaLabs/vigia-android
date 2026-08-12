@@ -11,7 +11,7 @@ class VigiaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        AmplifyInitializer.initialize(this)
+        AmplifyInitializer.initialize(this, demoBuild = BuildConfig.DEMO_BYPASS_AUTH)
         // OSMDroid requires this before any map view is inflated.
         Configuration.getInstance().apply {
             load(this@VigiaApplication, getSharedPreferences("osmdroid", MODE_PRIVATE))

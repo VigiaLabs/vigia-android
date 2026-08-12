@@ -4,4 +4,19 @@
     <!-- Auth needs network for Cognito token exchange. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Amplify Hosted-UI redirect target for federated sign-in. Keeping the
+         declaration beside the dependency lets library lint verify the class. -->
+    <application>
+        <activity
+            android:name="com.amplifyframework.auth.cognito.activities.HostedUIRedirectActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vigia" />
+            </intent-filter>
+        </activity>
+    </application>
+
 </manifest>

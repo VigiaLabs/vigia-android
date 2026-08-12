@@ -18,6 +18,10 @@ data class AuthUser(
 sealed interface AuthState {
     /** Session is being restored at startup — show a splash, not the auth screen. */
     data object Loading : AuthState
+
+    /** The production identity provider could not be configured. Never fall back to demo auth. */
+    data class ConfigurationError(val message: String) : AuthState
+
     data object SignedOut : AuthState
     data class SignedIn(val user: AuthUser) : AuthState
 }

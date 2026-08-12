@@ -2,6 +2,7 @@ package com.vigia.core.sensor.pairing
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -50,11 +51,18 @@ class ClaimDeviceRepositoryImpl @Inject constructor(
                             if (detail == "wallet_taken") ClaimResult.WalletTaken
                             else ClaimResult.DeviceTaken
                         }
-                        else -> ClaimResult.NetworkError("HTTP ${response.code}")
+                        401 -> ClaimResult.Unauthorized
+                        403 -> ClaimResult.Forbidden
+                        in 400..499 -> ClaimResult.InvalidRequest(
+                            "HTTP ${response.code}: ${response.body?.string().orEmpty().take(200)}"
+                        )
+                        else -> ClaimResult.ServerError(response.code, "HTTP ${response.code}")
                     }
                 }
+            } catch (e: IOException) {
+                ClaimResult.TransientNetworkError(e.message ?: "network error")
             } catch (e: Exception) {
-                ClaimResult.NetworkError(e.message ?: "network error")
+                ClaimResult.ServerError(0, e.message ?: "claim request failed")
             }
         }
 }

@@ -7,4 +7,6 @@ data class LocationSnapshot(
     val bearingDeg: Float,
     val velocityMs: Float,
     val timestampMs: Long,
+    /** False when no permission/fix exists; coordinates must not be treated as real. */
+    val isAvailable: Boolean = true,
 )

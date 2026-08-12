@@ -3,7 +3,11 @@ package com.vigia.feature.copilot
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,7 +33,15 @@ import com.vigia.feature.pairing.PairingScreen
  *   SignedIn  → [CopilotRoute]
  */
 @Composable
-fun AppRoot(bypassSignIn: Boolean = false) {
+fun AppRoot(
+    bypassSignIn: Boolean = false,
+    configurationError: String? = null,
+) {
+    if (configurationError != null) {
+        ConfigurationErrorGate(configurationError)
+        return
+    }
+
     val authViewModel: AuthViewModel = hiltViewModel()
     val authState by authViewModel.authState.collectAsStateWithLifecycle()
     val ui        by authViewModel.ui.collectAsStateWithLifecycle()
@@ -45,6 +57,8 @@ fun AppRoot(bypassSignIn: Boolean = false) {
 
     when (val state = authState) {
         AuthState.Loading -> SplashGate()
+
+        is AuthState.ConfigurationError -> ConfigurationErrorGate(state.message)
 
         AuthState.SignedOut -> AuthScreen(
             ui         = ui,
@@ -99,6 +113,37 @@ private fun SplashGate() {
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         ) {
             AiOrb(state = OrbState.Searching, size = 120.dp)
+        }
+    }
+}
+
+@Composable
+private fun ConfigurationErrorGate(message: String) {
+    VigiaTheme {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(32.dp),
+            ) {
+                AiOrb(state = OrbState.Offline, size = 120.dp)
+                Spacer(Modifier.height(24.dp))
+                androidx.compose.material3.Text(
+                    text = "VIGIA is unavailable",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

@@ -32,28 +32,22 @@ class StripePayRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     @Named("VigiaOkHttpClient") private val okHttpClient: OkHttpClient,
     @Named("VigiaApiBaseUrl")   private val baseUrl: String,
+    @Named("PayoutEnabled") private val payoutEnabled: Boolean,
 ) : StripePayRepository {
 
     private val _payoutStatus = MutableStateFlow<PayoutStatus>(PayoutStatus.Idle)
     override val payoutStatus: StateFlow<PayoutStatus> = _payoutStatus.asStateFlow()
 
-    // Wallet address + ownership proof headers are set by the caller via [setWalletProof].
-    private var walletAddress: String = ""
-    private var walletTimestamp: String = ""
-    private var walletSignature: String = ""
-
-    fun setWalletProof(address: String, timestamp: String, signature: String) {
-        walletAddress  = address
-        walletTimestamp = timestamp
-        walletSignature = signature
-    }
-
-    override suspend fun startConnectOnboarding(): Unit = withContext(Dispatchers.IO) {
+    override suspend fun startConnectOnboarding(proof: WalletProof): Unit = withContext(Dispatchers.IO) {
+        if (!payoutEnabled) {
+            _payoutStatus.value = PayoutStatus.Disabled
+            return@withContext
+        }
         _payoutStatus.value = PayoutStatus.OnboardingInProgress
         try {
             val response = post("/stripe/onboard-session", JSONObject().apply {
-                put("wallet_address", walletAddress)
-            })
+                put("wallet_address", proof.address)
+            }, proof)
             val onboardingUrl = response.getString("onboarding_url")
             val accountId     = response.getString("account_id")
             // The caller (ViewModel) opens a Custom Tab to onboardingUrl.
@@ -65,47 +59,52 @@ class StripePayRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun initiatePayment(amountCents: Long, currency: String) = withContext(Dispatchers.IO) {
+    override suspend fun initiatePayment(amountCents: Long, currency: String, proof: WalletProof) = withContext(Dispatchers.IO) {
+        if (!payoutEnabled) {
+            _payoutStatus.value = PayoutStatus.Disabled
+            return@withContext
+        }
         _payoutStatus.value = PayoutStatus.PaymentPending(amountCents, currency)
         try {
             val response = post("/stripe/payout-session", JSONObject().apply {
-                put("wallet_address", walletAddress)
+                put("wallet_address", proof.address)
                 put("amount_cents", amountCents)
                 put("currency", currency)
-            })
+            }, proof)
             val clientSecret   = response.getString("client_secret")
             val publishableKey = response.getString("publishable_key")
 
             // Initialise Stripe SDK with the publishable key returned by our backend.
             PaymentConfiguration.init(context, publishableKey)
 
-            // Payment confirmation is handled by the feature layer (PaymentSheet).
-            // The client_secret is stored in PayoutStatus so the UI can launch the sheet.
+            // Payment confirmation/webhook settlement is handled after the intent is created.
+            // A client secret is never a charge ID or a successful payout.
             Log.d(TAG, "PaymentIntent created → ${amountCents}¢ $currency")
-            _payoutStatus.value = PayoutStatus.PaymentSucceeded(clientSecret)
+            _payoutStatus.value = PayoutStatus.PaymentIntentCreated(clientSecret)
         } catch (e: Exception) {
             Log.e(TAG, "initiatePayment failed", e)
             _payoutStatus.value = PayoutStatus.Failed(e.message ?: "Payment failed")
         }
     }
 
-    override suspend fun startFinancialConnectionsSession(): String = withContext(Dispatchers.IO) {
+    override suspend fun startFinancialConnectionsSession(proof: WalletProof): String = withContext(Dispatchers.IO) {
+        check(payoutEnabled) { "Payout is disabled in this build" }
         val response = post("/stripe/financial-session", JSONObject().apply {
-            put("wallet_address", walletAddress)
-        })
+            put("wallet_address", proof.address)
+        }, proof)
         val clientSecret   = response.getString("client_secret")
         val publishableKey = response.getString("publishable_key")
         PaymentConfiguration.init(context, publishableKey)
         clientSecret
     }
 
-    private suspend fun post(path: String, body: JSONObject): JSONObject = withContext(Dispatchers.IO) {
+    private suspend fun post(path: String, body: JSONObject, proof: WalletProof): JSONObject = withContext(Dispatchers.IO) {
         val url = baseUrl.trimEnd('/') + path
         val request = Request.Builder()
             .url(url)
             .post(body.toString().toRequestBody(JSON_MEDIA))
-            .header("X-Wallet-Timestamp", walletTimestamp)
-            .header("X-Wallet-Signature", walletSignature)
+            .header("X-Wallet-Timestamp", proof.timestamp)
+            .header("X-Wallet-Signature", proof.signature)
             .build()
 
         val responseBody = okHttpClient.newCall(request).execute().use { response ->

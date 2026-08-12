@@ -116,6 +116,13 @@ fun PairingScreen(
                 onAction = viewModel::retryScanning,
             )
 
+            is PairingState.VerificationUnavailable -> CenteredMessage(
+                title = "Verification required",
+                body  = s.message,
+                actionLabel = "Try again",
+                onAction = viewModel::retryScanning,
+            )
+
             is PairingState.DeviceAlreadyClaimed -> {
                 val title: String
                 val body: String

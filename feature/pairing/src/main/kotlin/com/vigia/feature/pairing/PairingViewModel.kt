@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.companion.AssociationRequest
 import android.companion.BluetoothLeDeviceFilter
 import android.companion.CompanionDeviceManager
+import android.bluetooth.le.ScanFilter
 import android.content.Context
 import android.content.IntentSender
 import android.net.Uri
@@ -21,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.concurrent.Executors
 import java.util.regex.Pattern
 import javax.inject.Inject
 
@@ -91,7 +91,9 @@ class PairingViewModel @Inject constructor(
     @SuppressLint("MissingPermission")
     private fun associateWithCdm(mac: String, piPublicKeyBytes: ByteArray, deviceId: String) {
         val deviceFilter = BluetoothLeDeviceFilter.Builder()
-            .setNamePattern(Pattern.compile("VIGIA.*"))
+            // The QR MAC is the identity boundary. A name-only filter can pair
+            // with an attacker-controlled device advertising a VIGIA-like name.
+            .setScanFilter(ScanFilter.Builder().setDeviceAddress(mac).build())
             .build()
 
         val request = AssociationRequest.Builder()
@@ -99,7 +101,7 @@ class PairingViewModel @Inject constructor(
             .setSingleDevice(true)   // auto-select if exactly one matching device is found
             .build()
 
-        cdm.associate(request, Executors.newSingleThreadExecutor(), object : CompanionDeviceManager.Callback() {
+        cdm.associate(request, context.mainExecutor, object : CompanionDeviceManager.Callback() {
 
             override fun onDeviceFound(chooserLauncher: IntentSender) {
                 // Emit the intent sender — PairingScreen launches it via ActivityResultLauncher.
@@ -160,12 +162,20 @@ class PairingViewModel @Inject constructor(
             // We sign the wallet half here (Ed25519 via the TEE-backed keystore). The
             // device half (ATECC ECDSA over the same message) must come from the Pi over
             // BLE — pending firmware support to sign an app-supplied binding challenge.
-            // Until then deviceSig is empty: the server rejects (401) and we fall back to
-            // local-only pairing below (NetworkError branch), re-attempting on next launch.
+            // Until then deviceSig remains unavailable and pairing is deliberately blocked;
+            // persisting a local-only association would violate the ownership invariant.
             val ts        = System.currentTimeMillis()
             val bindMsg   = "VIGIA-BIND:$deviceId:$walletPubkey:$ts"
             val walletSig = walletRepository.signRaw(bindMsg.toByteArray(Charsets.UTF_8))
             val deviceSig = "" // TODO(firmware): obtain Pi ECDSA signature over bindMsg via BLE
+
+            if (deviceSig.isBlank()) {
+                _state.value = PairingState.VerificationUnavailable(
+                    "This device cannot prove ownership yet. Update the VIGIA firmware " +
+                        "and retry once device verification is available."
+                )
+                return@launch
+            }
 
             // Server enforces 1:1 device-wallet binding before we persist locally.
             when (val result = claimDeviceRepository.claimDevice(deviceId, walletPubkey, ts, walletSig, deviceSig)) {
@@ -178,11 +188,33 @@ class PairingViewModel @Inject constructor(
                     _state.value = PairingState.DeviceAlreadyClaimed(deviceId, "wallet_taken")
                     return@launch
                 }
-                is ClaimResult.NetworkError -> {
-                    // Network failure — allow pairing to proceed locally so the device
-                    // works offline; the claim will be re-attempted on next app launch.
-                    android.util.Log.w("PairingViewModel",
-                        "claim-device network error: ${result.message} — proceeding locally")
+                ClaimResult.Unauthorized -> {
+                    _state.value = PairingState.VerificationUnavailable(
+                        "Your session is not authorized to claim this device. Sign in again and retry."
+                    )
+                    return@launch
+                }
+                ClaimResult.Forbidden -> {
+                    _state.value = PairingState.VerificationUnavailable(
+                        "Your account is not allowed to claim this device. Contact support if this is unexpected."
+                    )
+                    return@launch
+                }
+                is ClaimResult.InvalidRequest -> {
+                    _state.value = PairingState.Error("Device claim rejected: ${result.message}")
+                    return@launch
+                }
+                is ClaimResult.ServerError -> {
+                    _state.value = PairingState.VerificationUnavailable(
+                        "The claim service is unavailable (HTTP ${result.statusCode}). Try again later."
+                    )
+                    return@launch
+                }
+                is ClaimResult.TransientNetworkError -> {
+                    _state.value = PairingState.VerificationUnavailable(
+                        "A network connection is required to verify this device. Check your connection and retry."
+                    )
+                    return@launch
                 }
             }
 

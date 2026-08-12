@@ -1,6 +1,7 @@
 package com.vigia.core.network.mqtt
 
 import android.content.Context
+import com.vigia.core.data.AlertInboxRepository
 import com.vigia.core.model.HazardAlert
 import com.vigia.core.model.LocationSnapshot
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -10,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.eclipse.paho.client.mqttv3.IMqttActionListener
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
@@ -47,15 +49,34 @@ import kotlin.coroutines.suspendCoroutine
 class MqttAlertRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     @Named("MqttBrokerUri") private val brokerUri: String,
+    private val alertInboxRepository: AlertInboxRepository,
 ) : MqttAlertRepository {
 
-    private val _alerts = MutableSharedFlow<HazardAlert>(replay = 1, extraBufferCapacity = 16)
+    private val _alerts = MutableSharedFlow<HazardAlert>(replay = 16, extraBufferCapacity = 16)
     override val alerts: SharedFlow<HazardAlert> = _alerts.asSharedFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val emittedAlertIds = LinkedHashSet<String>()
 
     @Volatile private var client: MqttAsyncClient? = null
     @Volatile private var activeUserId: String? = null
+
+    init {
+        // Replays alerts that arrived through FCM/MQTT while the process was dead.
+        // The inbox is the source of truth; the SharedFlow is only a delivery edge.
+        scope.launch {
+            alertInboxRepository.pendingAlerts.collect { pending ->
+                pending.asReversed().forEach { alert ->
+                    if (emittedAlertIds.add(alert.id)) {
+                        _alerts.emit(alert)
+                    }
+                }
+                while (emittedAlertIds.size > MAX_EMITTED_IDS) {
+                    emittedAlertIds.remove(emittedAlertIds.first())
+                }
+            }
+        }
+    }
 
     override fun connect(userId: String) {
         activeUserId = userId
@@ -79,7 +100,7 @@ class MqttAlertRepositoryImpl @Inject constructor(
     }
 
     override suspend fun injectAlert(alert: HazardAlert) {
-        _alerts.emit(alert)
+        alertInboxRepository.store(alert)
     }
 
     // ── private ───────────────────────────────────────────────────────────────
@@ -142,7 +163,7 @@ class MqttAlertRepositoryImpl @Inject constructor(
 
         override fun messageArrived(topic: String, message: MqttMessage) {
             parseAlert(message.payload)?.let { alert ->
-                scope.launch { _alerts.emit(alert) }
+                scope.launch { alertInboxRepository.store(alert) }
             }
         }
 
@@ -182,4 +203,8 @@ class MqttAlertRepositoryImpl @Inject constructor(
         } catch (_: Exception) {
             null
         }
+
+    private companion object {
+        const val MAX_EMITTED_IDS = 256
+    }
 }

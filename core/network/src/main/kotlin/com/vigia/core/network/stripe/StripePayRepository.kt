@@ -8,7 +8,14 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface StripePayRepository {
     val payoutStatus: StateFlow<PayoutStatus>
-    suspend fun startConnectOnboarding()
-    suspend fun initiatePayment(amountCents: Long, currency: String)
-    suspend fun startFinancialConnectionsSession(): String  // returns opaque client_secret
+    suspend fun startConnectOnboarding(proof: WalletProof)
+    suspend fun initiatePayment(amountCents: Long, currency: String, proof: WalletProof)
+    suspend fun startFinancialConnectionsSession(proof: WalletProof): String  // returns opaque client_secret
 }
+
+/** Per-request wallet proof. It is passed explicitly to avoid mutable singleton request state. */
+data class WalletProof(
+    val address: String,
+    val timestamp: String,
+    val signature: String,
+)

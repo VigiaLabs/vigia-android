@@ -27,6 +27,9 @@ sealed interface PairingState {
 
     data class Error(val message: String) : PairingState
 
+    /** Pairing cannot be committed until server/device proof verification is available. */
+    data class VerificationUnavailable(val message: String) : PairingState
+
     /**
      * Server rejected the claim: device already bound to another account ("device_taken"),
      * or this account already owns a different device ("wallet_taken").

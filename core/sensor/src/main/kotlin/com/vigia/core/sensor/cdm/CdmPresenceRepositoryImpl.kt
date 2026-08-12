@@ -3,6 +3,8 @@ package com.vigia.core.sensor.cdm
 import android.companion.CompanionDeviceManager
 import android.companion.ObservingDevicePresenceRequest
 import android.content.Context
+import android.os.Build
+import android.annotation.SuppressLint
 import com.vigia.core.model.DevicePresenceState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,8 +22,8 @@ import javax.inject.Singleton
  *  2. Explicit [registerPresenceObserver] — instructs CDM to actively scan for the given
  *     association, enabling the callbacks above even when the app is backgrounded.
  *
- * minSdk = 34 guarantee: [CompanionDeviceManager.startObservingDevicePresence] and
- * [CompanionDeviceManager.stopObservingDevicePresence] are API 34 — no version guard needed.
+ * Presence observation was introduced in API 36. Older supported devices remain in
+ * Unknown state and use no unguarded API calls.
  */
 @Singleton
 class CdmPresenceRepositoryImpl @Inject constructor(
@@ -40,16 +42,23 @@ class CdmPresenceRepositoryImpl @Inject constructor(
      * Results are delivered via [CdmPresenceService].
      */
     // CDM system calls are fast binder calls — no IO dispatcher needed.
+    @SuppressLint("MissingPermission", "NewApi")
     override suspend fun registerPresenceObserver(associationId: Int) {
         if (associationId <= 0) return
+        if (Build.VERSION.SDK_INT < 36) {
+            _presenceState.value = DevicePresenceState.Unknown
+            return
+        }
         val request = ObservingDevicePresenceRequest.Builder()
             .setAssociationId(associationId)
             .build()
         companionDeviceManager.startObservingDevicePresence(request)
     }
 
+    @SuppressLint("MissingPermission", "NewApi")
     override suspend fun unregisterPresenceObserver(associationId: Int) {
         if (associationId <= 0) return
+        if (Build.VERSION.SDK_INT < 36) return
         val request = ObservingDevicePresenceRequest.Builder()
             .setAssociationId(associationId)
             .build()

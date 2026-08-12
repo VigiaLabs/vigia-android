@@ -24,6 +24,7 @@ interface BleDataStreamer {
         val rriScore: RriScore,
         val spatialLatentVector: SpatialLatentVector,
         val receivedAtMs: Long = System.currentTimeMillis(),
+        val isAvailable: Boolean = true,
     )
 
     /**

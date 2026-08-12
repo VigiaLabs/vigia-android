@@ -4,6 +4,7 @@ import com.vigia.core.auth.AmplifyAuthRepository
 import com.vigia.core.auth.AmplifyInitializer
 import com.vigia.core.auth.AuthRepository
 import com.vigia.core.auth.DemoAuthRepository
+import com.vigia.core.auth.MisconfiguredAuthRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,8 +13,8 @@ import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
- * Binds the real Cognito backend when Amplify configured at startup, otherwise
- * the runnable demo backend. [Provider] ensures only the chosen impl is built.
+ * Binds demo auth only for the explicit demo flavour. Production configuration
+ * failures bind a blocking implementation instead of silently weakening identity.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -24,6 +25,11 @@ object AuthModule {
     fun provideAuthRepository(
         amplify: Provider<AmplifyAuthRepository>,
         demo: Provider<DemoAuthRepository>,
+        misconfigured: Provider<MisconfiguredAuthRepository>,
     ): AuthRepository =
-        if (AmplifyInitializer.isConfigured) amplify.get() else demo.get()
+        when {
+            AmplifyInitializer.isDemoBuild -> demo.get()
+            AmplifyInitializer.isConfigured -> amplify.get()
+            else -> misconfigured.get()
+        }
 }

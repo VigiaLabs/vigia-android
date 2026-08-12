@@ -7,6 +7,10 @@ android {
     namespace = "com.vigia.core.data"
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(project(":core:model"))
 

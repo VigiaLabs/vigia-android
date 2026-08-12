@@ -209,12 +209,16 @@ class OkHttpSseSearchClient @Inject constructor(
 
     internal fun buildRequestBody(ctx: VigiaSearchContext): String {
         val contextObj = JSONObject().apply {
-            put("locationLat",    ctx.location.latitudeDeg)
-            put("locationLng",    ctx.location.longitudeDeg)
-            put("accuracyMeters", ctx.location.accuracyMeters)
-            put("bearingDeg",     ctx.location.bearingDeg)
+            put("locationAvailable", ctx.locationAvailable)
+            if (ctx.locationAvailable) {
+                put("locationLat",    ctx.location.latitudeDeg)
+                put("locationLng",    ctx.location.longitudeDeg)
+                put("accuracyMeters", ctx.location.accuracyMeters)
+                put("bearingDeg",     ctx.location.bearingDeg)
+            }
             put("velocityMs",     ctx.velocityMs)
-            put("rriScore",       ctx.rriScore.value)
+            put("telemetryAvailable", ctx.telemetryAvailable)
+            put("rriScore",       if (ctx.telemetryAvailable) ctx.rriScore.value else JSONObject.NULL)
             put("timestampMs",    ctx.timestampMs)
         }
         val historyArr = JSONArray().also { arr ->

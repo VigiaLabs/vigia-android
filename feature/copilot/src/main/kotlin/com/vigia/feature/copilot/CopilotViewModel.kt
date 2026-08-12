@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vigia.core.data.ChatRepository
 import com.vigia.core.network.stripe.StripePayRepository
-import com.vigia.core.network.stripe.StripePayRepositoryImpl
+import com.vigia.core.network.stripe.WalletProof
 import com.vigia.core.model.ChatMessage
 import com.vigia.core.model.ChatSession
 import com.vigia.core.model.ConversationTurn
@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -625,7 +626,9 @@ class CopilotViewModel @Inject constructor(
 
     private fun startDrivingAssistance() {
         // Lane drift detection — feeds from GPS location flow.
-        val locationFlow = contextAggregator.searchContext.map { it.location }
+        val locationFlow = contextAggregator.searchContext
+            .map { it.location }
+            .filter { it.isAvailable }
         laneDriftDetector.start(locationFlow)
         viewModelScope.launch {
             laneDriftDetector.events.collect { event ->
@@ -858,15 +861,12 @@ class CopilotViewModel @Inject constructor(
         val sig  = walletRepository.signRaw(
             "VIGIA-PAYOUT:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
         )
-        (stripePayRepository as? StripePayRepositoryImpl)?.setWalletProof(
-            address   = ws.publicKey,
-            timestamp = tsMs.toString(),
-            signature = sig,
-        )
+        val proof = WalletProof(ws.publicKey, tsMs.toString(), sig)
         viewModelScope.launch {
             stripePayRepository.initiatePayment(
                 amountCents = ws.pendingBalanceMicroVigia / 10_000L,
                 currency    = "usd",
+                proof       = proof,
             )
         }
     }
@@ -878,12 +878,9 @@ class CopilotViewModel @Inject constructor(
             val sig  = walletRepository.signRaw(
                 "VIGIA-PAYOUT:${ws.publicKey}:$tsMs".toByteArray(Charsets.UTF_8)
             )
-            (stripePayRepository as? StripePayRepositoryImpl)?.setWalletProof(
-                address   = ws.publicKey,
-                timestamp = tsMs.toString(),
-                signature = sig,
+            stripePayRepository.startConnectOnboarding(
+                WalletProof(ws.publicKey, tsMs.toString(), sig),
             )
-            stripePayRepository.startConnectOnboarding()
         }
     }
 

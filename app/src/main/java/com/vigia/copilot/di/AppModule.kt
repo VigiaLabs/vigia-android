@@ -66,6 +66,12 @@ object AppModule {
     @Named("VigiaApiBaseUrl")
     fun provideVigiaApiBaseUrl(): String = BuildConfig.VIGIA_API_BASE_URL
 
+    /** Cash-out remains explicitly disabled until server settlement/reconciliation is complete. */
+    @Provides
+    @Singleton
+    @Named("PayoutEnabled")
+    fun providePayoutEnabled(): Boolean = BuildConfig.DEMO_BYPASS_AUTH
+
     /**
      * Bridges [AuthRepository.getIdToken] (suspend) into the synchronous
      * [ApiTokenProvider] interface required by OkHttp interceptors.

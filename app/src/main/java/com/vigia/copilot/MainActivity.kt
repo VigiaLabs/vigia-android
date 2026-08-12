@@ -31,7 +31,24 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            AppRoot(bypassSignIn = BuildConfig.DEMO_BYPASS_AUTH)
+            AppRoot(
+                bypassSignIn = BuildConfig.DEMO_BYPASS_AUTH,
+                configurationError = productionConfigurationError(),
+            )
         }
+    }
+
+    private fun productionConfigurationError(): String? {
+        if (BuildConfig.DEMO_BYPASS_AUTH) return null
+        val missing = buildList {
+            if (!BuildConfig.VIGIA_API_BASE_URL.startsWith("https://")) add("VIGIA_API_BASE_URL (HTTPS)")
+            if (!BuildConfig.MQTT_BROKER_URI.startsWith("ssl://")) add("MQTT_BROKER_URI (TLS)")
+            if (!BuildConfig.BLACKBOX_MAC.matches(Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) ||
+                BuildConfig.BLACKBOX_MAC == "00:00:00:00:00:00") add("BLACKBOX_MAC")
+        }
+        return missing.takeIf { it.isNotEmpty() }?.joinToString(
+            prefix = "Production configuration is incomplete: ",
+            separator = ", ",
+        )
     }
 }
