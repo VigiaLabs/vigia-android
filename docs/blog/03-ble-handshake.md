@@ -157,6 +157,14 @@ authenticated ephemeral key agreement—and then prove every binding.* The senio
 ECDH creates a shared session secret in endpoint memory, ECDH alone is unauthenticated, forward secrecy
 requires ephemeral keys, and QR/server ownership are part of the protocol's trust boundary.
 
+## Cross-repository production lens
+
+Pairing is only complete when the Android, Pi, and cloud implementations agree on one versioned,
+authenticated ownership contract. The [engineering knowledge pack](../engineering-knowledge/README.md)
+and [cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) make the open
+`deviceSig`, replay, revocation, and compatibility-test work explicit rather than treating a local
+handshake as production proof.
+
 ---
 
 > 📚 **Prepping for placements or interviews?** This series doubles as a study track. The [**VIGIA Interview Prep Companion**](https://ridingbluewaves.hashnode.dev/the-vigia-interview-prep-companion) ties every post to coding-round patterns, system-design drills, and behavioral (STAR) answers — a full Microsoft/Amazon prep guide grounded in these projects.

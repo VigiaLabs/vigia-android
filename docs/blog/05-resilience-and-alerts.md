@@ -185,6 +185,14 @@ event across broker/push, process, transaction, notification permission, TTS pol
 gap recovery; names the semantics at each boundary; then defines an SLO and tests duplicates, reorder,
 process death, reboot and denial. That is much stronger than saying “MQTT QoS 1 plus FCM.”
 
+## Cross-repository production lens
+
+The durable inbox is a client boundary in a larger event system. The [engineering knowledge pack](../engineering-knowledge/README.md)
+and [cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) extend the same
+reasoning to cloud queues, Pi ingress, SQLite edge projections, migrations, reconciliation, telemetry,
+and rollback. Delivery semantics are only production-ready when every participant shares the event
+contract and recovery evidence.
+
 ---
 
 > 📚 **Prepping for placements or interviews?** This series doubles as a study track. The [**VIGIA Interview Prep Companion**](https://ridingbluewaves.hashnode.dev/the-vigia-interview-prep-companion) ties every post to coding-round patterns, system-design drills, and behavioral (STAR) answers — a full Microsoft/Amazon prep guide grounded in these projects.

@@ -158,6 +158,13 @@ The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/Vigi
 requirement, backup, rotation/revocation and server policy separately.* “Android Keystore” is not a complete
 threat model, and a wrapped software key is not a hardware signing key.
 
+## Cross-repository production lens
+
+Key protection is one layer of identity. The [engineering knowledge pack](../engineering-knowledge/README.md)
+and [cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) separate storage,
+proof-of-possession, authorization, transport authentication, rotation, and recovery across Android,
+Pi, and cloud. That is why the device-signature contract remains a release gate.
+
 ---
 
 > 📚 **Prepping for placements or interviews?** This series doubles as a study track. The [**VIGIA Interview Prep Companion**](https://ridingbluewaves.hashnode.dev/the-vigia-interview-prep-companion) ties every post to coding-round patterns, system-design drills, and behavioral (STAR) answers — a full Microsoft/Amazon prep guide grounded in these projects.

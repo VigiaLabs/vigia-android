@@ -150,6 +150,14 @@ The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/Vigi
 that humans disappear: modules turn an import into a visible dependency declaration, while CI and review
 decide whether that declaration is allowed. The current leaks are proof that visibility alone is not enforcement.
 
+## Cross-repository production lens
+
+This module graph is one boundary in a larger VIGIA system. The [engineering knowledge pack](../engineering-knowledge/README.md)
+and [cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) apply the same test to
+the Pi, AWS/Azure, search, and web codebases: clear ownership, typed contracts, durable state, SLOs,
+release evidence, and rollback. The Android foundation is strong, but the portfolio is production-
+oriented rather than certified until those cross-repository controls are uniform.
+
 ---
 
 > 📚 **Prepping for placements or interviews?** This series doubles as a study track. The [**VIGIA Interview Prep Companion**](https://ridingbluewaves.hashnode.dev/the-vigia-interview-prep-companion) ties every post to coding-round patterns, system-design drills, and behavioral (STAR) answers — a full Microsoft/Amazon prep guide grounded in these projects.

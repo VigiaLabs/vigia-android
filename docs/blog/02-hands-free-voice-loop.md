@@ -163,6 +163,13 @@ The code is open at [github.com/VigiaLabs/vigia-android](https://github.com/Vigi
 
 **The one to defend:** *the self-closing loop (FSM + auto-reopen + clean cancellation).* The insight isn't the speech tech; it's that **a hands-free interface must be a loop that closes itself and can never silently stop** — an explicit FSM with a liveness invariant (mic always returns), preemptible output (barge-in), and structured concurrency so interruption cancels cleanly. Treating every failure as "keep listening" is what makes it usable at 80 km/h.
 
+## Cross-repository production lens
+
+Voice is a distributed workflow, not only a Compose feature. The [engineering knowledge pack](../engineering-knowledge/README.md)
+connects its state machine, backpressure, lifecycle, and SLO questions to the Pi, cloud, and web
+boundaries; the [cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) records
+which of those controls are implemented versus still planned.
+
 ---
 
 > 📚 **Prepping for placements or interviews?** This series doubles as a study track. The [**VIGIA Interview Prep Companion**](https://ridingbluewaves.hashnode.dev/the-vigia-interview-prep-companion) ties every post to coding-round patterns, system-design drills, and behavioral (STAR) answers — a full Microsoft/Amazon prep guide grounded in these projects.
