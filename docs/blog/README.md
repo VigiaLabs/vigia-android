@@ -14,6 +14,16 @@ Edit here; these are the source of truth for the writing.
 | [05-resilience-and-alerts.md](05-resilience-and-alerts.md) | Ep 5 — from best-effort transports to a durable warning inbox |
 | [06-interview-prep-companion.md](06-interview-prep-companion.md) | Interview companion — CS fundamentals, coding patterns, design drills, and project stories |
 
+The companion now has a versioned cross-repository rubric. The durable knowledge pack covers
+[system design](../engineering-knowledge/01-system-design.md),
+[OOP/design](../engineering-knowledge/02-oop-and-design.md),
+[DBMS/data](../engineering-knowledge/03-dbms-and-data.md),
+[computer architecture](../engineering-knowledge/04-computer-architecture.md),
+[mobile production](../engineering-knowledge/05-mobile-production.md), and
+[cloud infrastructure](../engineering-knowledge/06-cloud-infrastructure.md). The evidence-based
+[VIGIA cross-repo audit](../engineering-knowledge/vigia-cross-repo-audit.md) is the source for
+implemented/partial/planned labels across Android, edge, cloud, and web repositories.
+
 **Status vocabulary:** posts use **implemented**, **partial**, **planned**, and **verified in release**
 deliberately. Architecture intent is not described as shipped security/reliability. Open implementation
 findings are summarised in [`ARCHITECTURE_HARDENING_SPEC.md`](../../ARCHITECTURE_HARDENING_SPEC.md) and

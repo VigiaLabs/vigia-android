@@ -178,6 +178,21 @@ None of these are exotic alone. The interesting part was deciding, for software 
 
 The full app is open at [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
 
+## The bar is now cross-repository, not Android-only
+
+The phone is one participant in a larger system: Pi edge inference, AWS/Azure services, search/web
+surfaces, and recovery data all have their own lifecycles and failure modes. The production question is
+therefore not “did we pick the fashionable framework?” It is “can the same identity, event, freshness,
+and failure contract be traced across every boundary?”
+
+The versioned [VIGIA engineering knowledge pack](../engineering-knowledge/README.md) turns that question
+into six interview-ready subjects—system design, OOP/design, DBMS, computer architecture, mobile, and
+cloud—and the [cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) records what
+is implemented, partial, and planned. The audit found a strong Android foundation and serious edge/cloud
+work, but uneven CI, observability, contract tests, release provenance, and recovery evidence outside
+the Android repository. That is the honest portfolio story: the architecture is becoming production
+oriented, not magically production certified.
+
 ---
 
 ## 🎓 CS Fundamentals — study companion

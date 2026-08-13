@@ -85,9 +85,9 @@ signing, and the remaining migration/security tests remain planned work.
 | **Cohesive business workflows** | ❌ Missing | `CopilotViewModel` is ~1,100 lines and coordinates search, speech, wallet, alerts, sensors, and payout |
 | **Typed error model** | ❌ Missing | only `ClaimDeviceRepository` uses a sealed `Result` |
 | **Offline-first data layer** | 🟡 Partial | Room holds chat + harsh events only; wallet/hazards/rewards are network-only |
-| **Automated testing** | ❌ Weak | about five meaningful JVM test files plus template tests; no auth, pairing, BLE lifecycle, migration, FCM/MQTT, payment, or Keystore security tests |
+| **Automated testing** | 🟡 Partial | JVM tests cover key repository/workflow behaviour and the hardening tranche; migration, auth/pairing lifecycle, FCM/MQTT, payment, Keystore, and cross-repository protocol tests remain release gates |
 | **Static analysis (detekt/ktlint)** | ❌ Missing | no config, no gradle plugin |
-| **CI/CD** | ❌ Missing | no GitHub Actions workflow or protected release gate |
+| **CI/CD** | 🟡 Baseline | `.github/workflows/android.yml` compiles demo/prod and runs unit/lint gates; protected signing, staged rollout, artifact provenance, and rollback gates remain |
 | **Performance tooling** | ❌ Missing | no baseline profile module, no macrobenchmark |
 | **Observability (crash/log/analytics)** | ❌ Missing | raw `android.util.Log` only |
 | **Type-safe navigation** | 🟡 Partial | pager/route strings, no typed routes |

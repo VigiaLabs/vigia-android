@@ -650,3 +650,32 @@ the reasoning interviewers are trying to sample.
 
 The Android source and corrected production plan are at
 [github.com/VigiaLabs/vigia-android](https://github.com/VigiaLabs/vigia-android).
+
+## Part IX — The cross-repository production bar
+
+The interview story is now larger than the Android module diagram. The phone, Pi, AWS/Azure services,
+search/web surfaces, and recovery exports are separate failure domains. The durable [engineering
+knowledge pack](../engineering-knowledge/README.md) turns that portfolio into six study tracks, and the
+[cross-repository audit](../engineering-knowledge/vigia-cross-repo-audit.md) records the evidence behind
+each status.
+
+The key conclusion is deliberately unglamorous: VIGIA uses current, recognizable frameworks, but
+framework choice is only the starting line. Android has the strongest production baseline after the
+hardening tranche. The other repositories show good modular and domain ideas, yet need more uniform CI,
+contract/replay tests, observability, release provenance, and recovery drills. The Pi path additionally
+needs a production-only signing/transport posture and fleet update policy. Saying this precisely is a
+better interview answer than calling every repository “FAANG-level.”
+
+When asked to defend the architecture, connect the subjects:
+
+| Subject | VIGIA question to answer |
+|---|---|
+| System design | What is authoritative, what is durable, and what happens when delivery is duplicated or delayed? |
+| OOP/design | Which type owns the invariant, and can the policy be tested without Android/network/GPU dependencies? |
+| DBMS | Which transaction, index, migration, inbox/outbox, or reconciliation rule makes the state correct? |
+| Computer architecture | Where are the latency, cache, memory, thermal, and hardware-trust budgets? |
+| Mobile | What survives lifecycle/process death, and how does the app degrade without inventing data? |
+| Cloud | Which SLO, identity boundary, telemetry signal, release gate, and rollback make the service operable? |
+
+The resulting portfolio claim is: **production-oriented architecture with an evidence-backed roadmap**,
+not a production certification. That distinction is the point of the series.
